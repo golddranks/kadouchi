@@ -1,0 +1,8 @@
+[package]
+name = "kakuuchi"
+version = "0.1.0"
+authors = ["Pyry Kontio <pyry.kontio@drasa.eu>"]
+
+[dependencies]
+regex = "1.0"
+nom = "4.0"
