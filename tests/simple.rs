@@ -1,4 +1,4 @@
-extern crate kakuuchi;
+extern crate kadouchi;
 
 use std::fs;
 
@@ -7,7 +7,7 @@ fn test_simple() {
 
 	let simple = fs::read("tests/fixtures/simple.ku").unwrap();
 
-	kakuuchi::parse(&simple).unwrap();
+	kadouchi::parse(&simple).unwrap();
 }
 
 #[test]
@@ -15,5 +15,5 @@ fn test_paths() {
 
 	let simple = fs::read("tests/fixtures/paths.ku").unwrap();
 
-	kakuuchi::parse(&simple).unwrap();
+	kadouchi::parse(&simple).unwrap();
 }
