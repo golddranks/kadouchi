@@ -1,0 +1,2 @@
+std.date.iso_hyphen as date
+std.date.japanese_slash as ja_date
