@@ -38,18 +38,18 @@ impl<'a> fmt::Debug for Namespace<'a> {
 }
 
 fn handle_export<'a>(call: &Call<'a>, local: &Map<&'a str, Namespace<'a>>, exported: &mut Set<&'a str>) -> Result<(), InvalidExportError> {
-    if call.call.only_segment() == Some(KEYWORD_EXPORT) {
+    if call.path.only_segment() == Some(KEYWORD_EXPORT) {
         for exported_item in &call.args {
             if let Some(name) = exported_item.bound_name() {
                 exported.insert(name);
             } else {
                 // Syntactic sugar: if it's a local name, you don't need as
-                if let Some(simple_name) = exported_item.call().and_then(|c| c.call.only_segment()) {
+                if let Some(simple_name) = exported_item.call().and_then(|c| c.path.only_segment()) {
                     if local.get(simple_name).is_some() {
                         exported.insert(simple_name);
                     }
                 } else {
-                    return Err(InvalidExportError(call.call.to_string()));
+                    return Err(InvalidExportError(call.path.to_string()));
                 }
             }
         }
@@ -88,11 +88,11 @@ fn resolve_recursive<'a, 'str: 'a>(token_tree: &'a [Exp<'str>], scopes: Stack<&'
         if let Some(call) = token.call() {
 
             // Searches for the referent item from the surrounding scopes using the first segment of the path
-            let item_ns = find_referent(call.call.head(), scopes.push(&ns))?;
+            let item_ns = find_referent(call.path.head(), scopes.push(&ns))?;
 
             // Walks the path while visiting recursively the inner namespaces of the item
             // Checks if the path points to a valid and accessible (exported) item.
-            walk_path(&call.call, item_ns)?;
+            walk_path(&call.path, item_ns)?;
 
             // Checks if the current item is an export command
             handle_export(call, &ns.local, &mut ns.exported)?;

@@ -38,7 +38,7 @@ impl<'a> Path<'a> {
 pub struct Lit<'a>(&'a str);
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct Call<'a>{ pub call: Path<'a>, pub args: Vec<Exp<'a>>}
+pub struct Call<'a>{ pub path: Path<'a>, pub args: Vec<Exp<'a>>}
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum AnonExp<'a> {
@@ -141,9 +141,9 @@ fn test_parse_par_list_1() {
     let result = par_list(CompleteStr("(hoge.fuga.piyo second third)"));
 
     assert_eq!(result, Ok((CompleteStr(""), vec![
-        Exp(AnonExp::Call(Call{ call: Path(vec![Sym("hoge"), Sym("fuga"), Sym("piyo")]), args: vec![]}), None),
-        Exp(AnonExp::Call(Call{ call: Path(vec![Sym("second")]), args: vec![]}), None),
-        Exp(AnonExp::Call(Call{ call: Path(vec![Sym("third")]), args: vec![]}), None),
+        Exp(AnonExp::Call(Call{ path: Path(vec![Sym("hoge"), Sym("fuga"), Sym("piyo")]), args: vec![]}), None),
+        Exp(AnonExp::Call(Call{ path: Path(vec![Sym("second")]), args: vec![]}), None),
+        Exp(AnonExp::Call(Call{ path: Path(vec![Sym("third")]), args: vec![]}), None),
     ])));
 }
 
@@ -152,7 +152,7 @@ fn test_parse_par_list_2() {
     let result = par_list(CompleteStr("(single)"));
 
     assert_eq!(result, Ok((CompleteStr(""), vec![
-        Exp(AnonExp::Call(Call{ call: Path(vec![Sym("single")]), args: vec![]}), None)
+        Exp(AnonExp::Call(Call{ path: Path(vec![Sym("single")]), args: vec![]}), None)
     ])));
 }
 
@@ -176,7 +176,7 @@ fn test_parse_name_binding() {
 named!(anon_expression<CompleteStr, AnonExp>, ws!(alt!(do_parse!(
 		head: path >>
 		tail: opt!(par_list) >>
-		(AnonExp::Call(Call{ call: head, args: tail.unwrap_or(Vec::new())}))
+		(AnonExp::Call(Call{ path: head, args: tail.unwrap_or(Vec::new())}))
 	) | do_parse!(
 		lit: literal >>
 		(AnonExp::Literal(lit))
@@ -193,10 +193,10 @@ fn test_parse_exp_1() {
     let result = named_expression(CompleteStr("hoge(first second third) as fuga"));
 
     assert_eq!(result, Ok((CompleteStr(""),
-                           Exp(AnonExp::Call(Call{ call: Path(vec![Sym("hoge")]), args: vec![
-                               Exp(AnonExp::Call(Call{ call: Path(vec![Sym("first")]), args: vec![]}), None),
-                               Exp(AnonExp::Call(Call{ call: Path(vec![Sym("second")]), args: vec![]}), None),
-                               Exp(AnonExp::Call(Call{ call: Path(vec![Sym("third")]), args: vec![]}), None),
+                           Exp(AnonExp::Call(Call{ path: Path(vec![Sym("hoge")]), args: vec![
+                               Exp(AnonExp::Call(Call{ path: Path(vec![Sym("first")]), args: vec![]}), None),
+                               Exp(AnonExp::Call(Call{ path: Path(vec![Sym("second")]), args: vec![]}), None),
+                               Exp(AnonExp::Call(Call{ path: Path(vec![Sym("third")]), args: vec![]}), None),
                            ]}), Some(Sym("fuga")))
     )));
 }
@@ -206,7 +206,7 @@ fn test_parse_exp_2() {
     let result = named_expression(CompleteStr("hoge"));
 
     assert_eq!(result, Ok((CompleteStr(""),
-                           Exp(AnonExp::Call(Call{ call: Path(vec![Sym("hoge")]), args: vec![]}), None)
+                           Exp(AnonExp::Call(Call{ path: Path(vec![Sym("hoge")]), args: vec![]}), None)
     )));
 }
 
@@ -215,10 +215,10 @@ fn test_parse_exp_3() {
     let result = named_expression(CompleteStr("hoge(first second third)"));
 
     assert_eq!(result, Ok((CompleteStr(""),
-                           Exp(AnonExp::Call(Call{ call: Path(vec![Sym("hoge")]), args: vec![
-                               Exp(AnonExp::Call(Call{ call: Path(vec![Sym("first")]), args: vec![]}), None),
-                               Exp(AnonExp::Call(Call{ call: Path(vec![Sym("second")]), args: vec![]}), None),
-                               Exp(AnonExp::Call(Call{ call: Path(vec![Sym("third")]), args: vec![]}), None),
+                           Exp(AnonExp::Call(Call{ path: Path(vec![Sym("hoge")]), args: vec![
+                               Exp(AnonExp::Call(Call{ path: Path(vec![Sym("first")]), args: vec![]}), None),
+                               Exp(AnonExp::Call(Call{ path: Path(vec![Sym("second")]), args: vec![]}), None),
+                               Exp(AnonExp::Call(Call{ path: Path(vec![Sym("third")]), args: vec![]}), None),
                            ]}), None)
     )));
 }
@@ -228,7 +228,7 @@ fn test_parse_exp_4() {
     let result = named_expression(CompleteStr("hoge as fuga"));
 
     assert_eq!(result, Ok((CompleteStr(""),
-                           Exp(AnonExp::Call(Call{ call: Path(vec![Sym("hoge")]), args: vec![]}), Some(Sym("fuga")))
+                           Exp(AnonExp::Call(Call{ path: Path(vec![Sym("hoge")]), args: vec![]}), Some(Sym("fuga")))
     )));
 }
 
@@ -237,7 +237,7 @@ fn test_parse_exp_5() {
     let result = named_expression(CompleteStr("or() as day"));
 
     assert_eq!(result, Ok((CompleteStr(""),
-                           Exp(AnonExp::Call(Call{ call: Path(vec![Sym("or")]), args: vec![]}), Some(Sym("day")))
+                           Exp(AnonExp::Call(Call{ path: Path(vec![Sym("or")]), args: vec![]}), Some(Sym("day")))
     )));
 }
 
@@ -246,7 +246,7 @@ fn test_parse_exp_6() {
     let result = named_expression(CompleteStr("or(\"mon\") as day"));
 
     assert_eq!(result, Ok((CompleteStr(""),
-                           Exp(AnonExp::Call(Call{ call: Path(vec![Sym("or")]), args: vec![
+                           Exp(AnonExp::Call(Call{ path: Path(vec![Sym("or")]), args: vec![
                                Exp(AnonExp::Literal(Lit("mon")), None)
                            ]}), Some(Sym("day")))
     )));
@@ -259,9 +259,9 @@ fn test_parse_list() {
     let result = list(CompleteStr("hoge fuga    piyo"));
 
     assert_eq!(result, Ok((CompleteStr(""), vec![
-        Exp(AnonExp::Call(Call{ call: Path(vec![Sym("hoge")]), args: vec![]}), None),
-        Exp(AnonExp::Call(Call{ call: Path(vec![Sym("fuga")]), args: vec![]}), None),
-        Exp(AnonExp::Call(Call{ call: Path(vec![Sym("piyo")]), args: vec![]}), None),
+        Exp(AnonExp::Call(Call{ path: Path(vec![Sym("hoge")]), args: vec![]}), None),
+        Exp(AnonExp::Call(Call{ path: Path(vec![Sym("fuga")]), args: vec![]}), None),
+        Exp(AnonExp::Call(Call{ path: Path(vec![Sym("piyo")]), args: vec![]}), None),
     ])));
 }
 
