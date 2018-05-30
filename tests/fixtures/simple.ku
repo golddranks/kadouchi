@@ -1,6 +1,6 @@
 std.date.iso_hyphen as date
 
-or("mon"	"tue") as day
+std.or("mon"	"tue") as day
 
 col(
 	row(    "name"	"day"	"date"	"count"	"score")

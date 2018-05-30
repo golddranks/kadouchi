@@ -1,10 +1,10 @@
-intrisic as regexp
-intrisic as row
-intrisic as col
-intrisic as or
-intrisic as and
-intrisic as module
-intrisic as export
+intrinsic("regexp") as regexp
+intrinsic("row") as row
+intrinsic("col") as col
+intrinsic("or") as or
+intrinsic("and") as and
+intrinsic("module") as module
+intrinsic("export") as export
 
 module(
     regexp("abcd") as iso_hyphen
@@ -13,4 +13,21 @@ module(
     export(iso_hyphen japanese_slash)
 ) as date
 
-export(date row col or and)
+regexp("aaa") as str
+regexp("aaa") as int
+regexp("aaa") as uint
+regexp("aaa") as float
+
+export(date)
+
+export(
+	str as str
+	int as int
+	uint as uint
+	float as float
+	export as export
+	and as and
+	or as or
+	col as col
+	row as row
+) as prelude

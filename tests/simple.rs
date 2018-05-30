@@ -16,5 +16,5 @@ fn test_paths() {
 
 	let simple = fs::read("tests/fixtures/paths.ku").unwrap();
 
-	kadouchi::parse_lib(&simple, &kadouchi::Namespace::empty()).unwrap();
+	kadouchi::parse_with_stdlib(&simple).unwrap();
 }

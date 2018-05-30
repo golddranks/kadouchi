@@ -1,6 +1,7 @@
 
 use nom::{alphanumeric1, alpha1};
 use nom::types::CompleteStr;
+use errors::SyntaxError;
 use ::KEYWORD_AS;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -16,6 +17,20 @@ impl<'a> Path<'a> {
         } else {
             None
         }
+    }
+
+    pub fn head(&self) -> &'a str {
+        self.0[0].0
+    }
+
+    pub fn to_string(&self) -> String {
+        let mut out = String::new();
+        for segment in &self.0 {
+            out.push_str(segment.0);
+            out.push('.');
+        }
+        out.pop();
+        out
     }
 }
 
@@ -250,4 +265,7 @@ fn test_parse_list() {
     ])));
 }
 
-named!(pub parse_file<CompleteStr, Vec<Exp>>, exact!(call!(list)));
+pub fn parse_file(string: &str) -> Result<Vec<Exp>, SyntaxError> {
+    let string = CompleteStr(string);
+    Ok(exact!(string, call!(list)).map_err(|_| SyntaxError)?.1)
+}

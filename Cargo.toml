@@ -6,3 +6,5 @@ authors = ["Pyry Kontio <pyry.kontio@drasa.eu>"]
 [dependencies]
 regex = "1.0"
 nom = "4.0"
+scoped_stack = { path = "../scoped_stack" }
+failure = "0.1"
