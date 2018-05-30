@@ -6,13 +6,12 @@ use tokens::{Call, Exp};
 #[derive(Debug)]
 pub struct Namespace<'a> {
     exported: Vec<&'a str>,
-    local: Map<&'a str, Namespace<'a>>,
+    pub local: Map<&'a str, Namespace<'a>>,
 }
 
-fn prelude<'a>() -> Namespace<'a> {
-    Namespace {
-        exported: Vec::new(),
-        local: Map::new(),
+impl<'a> Namespace<'a> {
+    pub fn empty() -> Self {
+        Self { exported: Vec::new(), local: Map::new() }
     }
 }
 
@@ -40,7 +39,7 @@ fn check_paths<'a>(call: &Call<'a>, local: &Map<&'a str, Namespace<'a>>) -> Resu
     Ok(())
 }
 
-fn resolve_recursive<'a>(token_tree: &'a [Exp<'a>]) -> Result<Namespace<'a>, ()> {
+fn resolve_recursive<'a, 'str: 'a>(token_tree: &'a [Exp<'str>]/*, scope: Vec<&'a str>*/) -> Result<Namespace<'str>, ()> {
     let mut exported = Vec::new();
     let mut local = Map::new();
 
@@ -51,9 +50,12 @@ fn resolve_recursive<'a>(token_tree: &'a [Exp<'a>]) -> Result<Namespace<'a>, ()>
             handle_export(call, &local, &mut exported)?;
         }
 
+        let token_namespace = resolve_recursive(token.call_args())?;
+
         if let Some(name) = token.bound_name() {
-            local.insert(name, resolve_recursive(token.call_args())?);
+            local.insert(name, token_namespace);
         }
+
     }
     Ok(Namespace {
         exported,
@@ -61,7 +63,6 @@ fn resolve_recursive<'a>(token_tree: &'a [Exp<'a>]) -> Result<Namespace<'a>, ()>
     })
 }
 
-pub fn resolve<'a>(token_tree: &'a [Exp<'a>]) -> Result<Namespace<'a>, ()> {
-    let mut ns = prelude();
+pub fn resolve<'a, 'str>(token_tree: &'a [Exp<'str>], root_ns: &'a Namespace<'str>) -> Result<Namespace<'str>, ()> {
     resolve_recursive(token_tree)
 }

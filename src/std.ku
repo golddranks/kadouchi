@@ -1,0 +1,16 @@
+intrisic as regexp
+intrisic as row
+intrisic as col
+intrisic as or
+intrisic as and
+intrisic as module
+intrisic as export
+
+module(
+    regexp("abcd") as iso_hyphen
+    regexp("efgh") as japanese_slash
+
+    export(iso_hyphen japanese_slash)
+) as date
+
+export(date row col or and)

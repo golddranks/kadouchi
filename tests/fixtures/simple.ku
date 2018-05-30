@@ -2,7 +2,7 @@ std.date.iso_hyphen as date
 
 or("mon"	"tue") as day
 
-pattern(
+col(
 	row(    "name"	"day"	"date"	"count"	"score")
 	col(
 		row(str		day		date	uint	float)

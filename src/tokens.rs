@@ -46,7 +46,7 @@ impl<'a> Exp<'a> {
         }
     }
 
-    pub fn call_args(&self) -> &[Exp] {
+    pub fn call_args(&self) -> &[Exp<'a>] {
         match &self.0 {
             AnonExp::Literal(_) => &[],
             AnonExp::Call(Call{ args, .. }) => args.as_slice(),
