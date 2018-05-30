@@ -1,9 +1,9 @@
-import(std.date.iso_hyphen) as date
+std.date.iso_hyphen as date
 
 or("mon"	"tue") as day
 
 pattern(
-	row(	"name"	"day"	"date"	"count"	"score")
+	row(    "name"	"day"	"date"	"count"	"score")
 	many(
 		row(str		day		date	uint	float)
 	) as data
