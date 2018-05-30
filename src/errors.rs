@@ -17,3 +17,7 @@ pub struct InvalidExportError(pub String);
 #[derive(Debug, Fail)]
 #[fail(display = "Can't shadow local bindings at binding {}", _0)]
 pub struct ShadowingError(pub String);
+
+#[derive(Debug, Fail)]
+#[fail(display = "Accessed item is private {}", _0)]
+pub struct PrivacyError(pub String);
