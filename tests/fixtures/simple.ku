@@ -4,7 +4,7 @@ or("mon"	"tue") as day
 
 pattern(
 	row(    "name"	"day"	"date"	"count"	"score")
-	many(
+	col(
 		row(str		day		date	uint	float)
 	) as data
 ) as simple
