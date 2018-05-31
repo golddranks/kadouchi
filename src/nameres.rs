@@ -15,20 +15,30 @@ pub struct Namespace<'a> {
     pub items: Vec<Item<'a>>,
 }
 
-#[derive(Debug)]
 pub struct Item<'a> {
     local_name: Option<&'a str>,
     exported: bool,
-    ns: Namespace<'a>,
+    pub ns: Namespace<'a>,
+    pub referent: Vec<&'a str>,
 }
 
 impl<'a> Item<'a> {
     pub fn anon() -> Self {
-        Self { ns: Namespace::empty(), exported: false, local_name: None }
+        Self { ns: Namespace::empty(), exported: false, local_name: None, referent: vec![] }
     }
 
     pub fn named(name: &'a str) -> Self {
-        Self { ns: Namespace::empty(), exported: false, local_name: Some(name)}
+        Self { ns: Namespace::empty(), exported: false, local_name: Some(name), referent: vec![] }
+    }
+}
+
+impl<'a> fmt::Debug for Item<'a> {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        formatter.write_str("Item: ")?;
+        formatter.write_str("Referent: ")?;
+        self.referent.fmt(formatter)?;
+        formatter.write_str(" ")?;
+        self.ns.fmt(formatter)
     }
 }
 
@@ -56,7 +66,14 @@ impl<'a> fmt::Debug for Namespace<'a> {
             formatter.write_str("Namespace ")?;
             let mut map = formatter.debug_map();
             for item in self.items.iter() {
-                map.entry(&item.local_name.unwrap_or("(anon)"), &item.ns);
+                let mut key =  "".to_owned();
+                if item.exported {
+                    key += "+ ";
+                } else {
+                    key += "- ";
+                }
+                key += item.local_name.unwrap_or("(anon)");
+                map.entry(&key, &item);
             }
             map.finish()
         }
@@ -89,24 +106,38 @@ fn handle_export<'a>(call: &Call<'a>, ns: &mut Namespace<'a>) -> Result<(), Inva
     Ok(())
 }
 
-fn find_referent<'a>(name: &'a str, scopes: Stack<&'a Namespace<'a>>) -> Result<&'a Namespace<'a>, UnknownNameError> {
-    for ns in scopes.iter() {
-        if let Some(idx) = ns.local.get(name) {
-            return Ok(&ns.items[*idx].ns);
+fn find_referent<'a, 'str: 'a>(name: &'str str, scopes: &'a Stack<&'a Item<'str>>) -> Result<(&'a Item<'str>, &'a Stack<'a, &'a Item<'str>>), UnknownNameError> {
+    for frame in scopes.iter_frames() {
+        if let Some(item) = frame.peek() {
+            if let Some(idx) = item.ns.local.get(name) {
+                return Ok((&item.ns.items[*idx], frame));
+            }
         }
     }
     Err(UnknownNameError(name.to_owned()))
 }
 
-fn walk_path<'a>(path: &'a Path, mut ns: &'a Namespace<'a>) -> Result<(), Error> {
+fn base_path<'str>(scopes: &Stack<&Item<'str>>) -> Vec<&'str str> {
+    let mut path = Vec::new();
+    for item in scopes.iter() {
+        path.push(item.local_name.expect("Invariant: the path that is used as a reference can't contain anonymous segments."));
+    }
+    path.reverse();
+    path
+}
+
+fn walk_path<'a, 'str, 'scope>(path: &'a Path<'str>, mut item: &'scope Item<'str>, abs_path: &mut Vec<&'str str>) -> Result<&'scope Item<'str>, Error> {
+
+    abs_path.push(item.local_name.expect("Invariant: the path that is used as a reference can't contain anonymous segments."));
 
     let mut path_iter = path.0.iter();
     path_iter.next().expect("Invariant: path always has at least one segment.");
 
     for segment in path_iter {
-        if let Some(idx) = ns.local.get(segment.0) {
-            if ns.items[*idx].exported {
-                ns = &ns.items[*idx].ns;
+        if let Some(idx) = item.ns.local.get(segment.0) {
+            if item.ns.items[*idx].exported {
+                item = &item.ns.items[*idx];
+                abs_path.push(item.local_name.expect("Invariant: the path that is used as a reference can't contain anonymous segments."));
             } else {
                 return Err(PrivacyError(segment.0.to_owned()).into())
             }
@@ -115,27 +146,14 @@ fn walk_path<'a>(path: &'a Path, mut ns: &'a Namespace<'a>) -> Result<(), Error>
         }
     }
 
-    Ok(())
+    Ok(item)
 }
 
-fn resolve_recursive<'a, 'str: 'a, 'ns>(token_tree: &'a [Exp<'str>], scopes: Stack<&'a Namespace<'str>>, ns: &mut Namespace<'str>) -> Result<(), Error> {
+fn resolve_recursive<'a, 'str: 'a, 'ns>(token_tree: &'a [Exp<'str>], scopes: Stack<&'ns Item<'str>>, parent: &mut Item<'str>) -> Result<(), Error> {
     for token in token_tree {
 
-        if let Some(call) = token.call() {
-
-            // Searches for the referent item from the surrounding scopes using the first segment of the path
-            let item_ns = find_referent(call.path.head(), scopes.push(&ns))?;
-
-            // Walks the path while visiting recursively the inner namespaces of the item
-            // Checks if the path points to a valid and accessible (exported) item.
-            walk_path(&call.path, item_ns)?;
-
-            // Checks if the current item is an export command
-            handle_export(call, &mut *ns)?;
-        }
-
         let mut item = if let Some(name) = token.bound_name() {
-            if ns.local.get(name).is_some() {
+            if parent.ns.local.get(name).is_some() {
                 return Err(ShadowingError(name.to_owned()).into());
             }
             Item::named(name)
@@ -143,8 +161,27 @@ fn resolve_recursive<'a, 'str: 'a, 'ns>(token_tree: &'a [Exp<'str>], scopes: Sta
             Item::anon()
         };
 
-        resolve_recursive(token.call_args(), scopes.push(&ns), &mut item.ns)?;
-        ns.add_item(item);
+        if let Some(call) = token.call() {
+
+            let scopes = scopes.push(&parent);
+
+            // Searches for the referent item from the surrounding scopes using the first segment of the path
+            let (base_referent, scope) = find_referent(call.path.head(), &scopes)?;
+
+            let mut path = base_path(&scope);
+
+            // Walks the path while visiting recursively the inner namespaces of the item
+            // Checks if the path points to a valid and accessible (exported) item.
+            walk_path(&call.path, &base_referent, &mut path)?;
+
+            // Checks if the current item is an export command
+            handle_export(call, &mut parent.ns)?;
+
+            item.referent = path;
+        }
+
+        resolve_recursive(token.call_args(), scopes.push(&parent), &mut item)?;
+        parent.ns.add_item(item);
     }
     Ok(())
 }
@@ -162,9 +199,9 @@ pub fn inject_prelude<'a, 'str>(token_tree: &'a [Exp<'str>], target: &'a mut Nam
     Ok(())
 }
 
-pub fn resolve<'a, 'str>(libname: &'str str, token_tree: &'a [Exp<'str>], root_ns: &'a Namespace<'str>) -> Result<Item<'str>, Error> {
+pub fn resolve<'a, 'str>(libname: &'str str, token_tree: &'a [Exp<'str>], root_ns: &'a Item<'str>) -> Result<Item<'str>, Error> {
     let scopes = Stack::new();
     let mut lib = Item::named(libname);
-    resolve_recursive(token_tree, scopes.push(root_ns), &mut lib.ns)?;
+    resolve_recursive(token_tree, scopes.push(root_ns), &mut lib)?;
     Ok(lib)
 }
