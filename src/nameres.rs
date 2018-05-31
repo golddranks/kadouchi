@@ -11,7 +11,6 @@ use tokens::{Call, Exp, Path as RelPath};
 use errors::{UnknownNameError, PathResolutionError, InvalidExportError, ShadowingError, PrivacyError};
 
 #[derive(Clone)]
-// Invariant: local is always superset of exported
 pub struct Namespace<'a> {
     pub local: Map<&'a str, usize>,
     pub items: Vec<Item<'a>>,
@@ -60,11 +59,13 @@ impl<'a> Item<'a> {
 
 #[test]
 fn test_traverse_path_1() {
+    use ::LIBNAME_PRELUDE;
+
     let mut root = Item::named(KEYWORD_ROOT);
 
     let mut prelude = Item::named(LIBNAME_PRELUDE);
 
-    let mut prelude_item = Item::named("prelude_item");
+    let prelude_item = Item::named("prelude_item");
 
     prelude.ns.add_item(prelude_item);
     root.ns.add_item(prelude);
@@ -75,10 +76,9 @@ fn test_traverse_path_1() {
 
 impl<'a> fmt::Debug for Item<'a> {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        formatter.write_str("Item: ")?;
-        formatter.write_str("Referent: ")?;
+        formatter.write_str("Refers: ")?;
         self.referent.fmt(formatter)?;
-        formatter.write_str(" ")?;
+        formatter.write_str(" NS: ")?;
         self.ns.fmt(formatter)
     }
 }
@@ -163,7 +163,11 @@ impl<'str> AbsPath<'str> {
 
 impl<'a> fmt::Debug for AbsPath<'a> {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        self.inner.fmt(formatter)
+        for seg in &self.inner {
+            formatter.write_str(".")?;
+            formatter.write_str(seg)?;
+        }
+        Ok(())
     }
 }
 
@@ -296,7 +300,7 @@ fn test_glob_import() {
 
     let mut prelude = Item::named(LIBNAME_PRELUDE);
 
-    let mut prelude_item = Item::named("prelude_item");
+    let prelude_item = Item::named("prelude_item");
 
     prelude.ns.add_item(prelude_item);
     root.ns.add_item(prelude);

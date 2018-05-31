@@ -7,3 +7,15 @@ std.and as and
 std.or as or
 std.col as col
 std.row as row
+
+export(
+    str
+    int
+    uint
+    float
+    export
+    and
+    or
+    col
+    row
+)

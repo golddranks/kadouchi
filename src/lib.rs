@@ -9,9 +9,21 @@ extern crate scoped_stack;
 
 /* TODO LIST
 
- - error handling (use Failure?)
+ PARSING
  - support for numeric literals
  - support for escaping in string literals
+
+ ERROR HANDLING
+ - support spans etc. better reporting
+
+ NAMERES
+ - support literals as arguments
+
+ TYPECHECK
+ - implement even something
+
+ RUNTIME
+ - implement even something
 
 */
 
@@ -84,7 +96,7 @@ pub fn parse_with_stdlib<'a>(filename: &'a Path, bytestore: &'a mut Vec<Vec<u8>>
 fn parse_single_lib_with_std() {
 	let mut bytestore = Vec::new();
 
-	let root = parse_with_stdlib("tests/fixtures/simple.ku", &mut bytestore).unwrap();
+	let root = parse_with_stdlib(Path::new("tests/fixtures/simple.ku"), &mut bytestore).unwrap();
 
 	println!("{:#?}", root);
 }
