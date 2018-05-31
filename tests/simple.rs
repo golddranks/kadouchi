@@ -5,16 +5,15 @@ use std::fs;
 #[test]
 fn test_simple() {
 
-	let std_bytes = fs::read("src/std.ku").expect("Error when opening STD");
-	let lib_bytes = fs::read("tests/fixtures/simple.ku").expect("Error when opening lib");
+	let mut bytestore = Vec::new();
 
-	kadouchi::parse_project(&[("std", std_bytes.as_slice()), ("lib", lib_bytes.as_slice())][..]).expect("Error when parsing project");
+	kadouchi::parse_with_stdlib("tests/fixtures/simple.ku", &mut bytestore).unwrap();
 }
 
 #[test]
 fn test_paths() {
 
-	let simple = fs::read("tests/fixtures/paths.ku").unwrap();
+	let mut bytestore = Vec::new();
 
-	kadouchi::parse_with_stdlib(&simple).unwrap();
+	kadouchi::parse_with_stdlib("tests/fixtures/paths.ku", &mut bytestore).unwrap();
 }

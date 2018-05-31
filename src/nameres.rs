@@ -5,16 +5,19 @@ use scoped_stack::Stack;
 use failure::Error;
 
 use ::KEYWORD_EXPORT;
-use ::KEYWORD_PRELUDE;
+use ::KEYWORD_ROOT;
+
 use tokens::{Call, Exp, Path as RelPath};
 use errors::{UnknownNameError, PathResolutionError, InvalidExportError, ShadowingError, PrivacyError};
 
+#[derive(Clone)]
 // Invariant: local is always superset of exported
 pub struct Namespace<'a> {
     pub local: Map<&'a str, usize>,
     pub items: Vec<Item<'a>>,
 }
 
+#[derive(Clone)]
 pub struct Item<'a> {
     local_name: Option<&'a str>,
     exported: bool,
@@ -24,23 +27,50 @@ pub struct Item<'a> {
 
 impl<'a> Item<'a> {
     pub fn anon() -> Self {
-        Self { ns: Namespace::empty(), exported: false, local_name: None, referent: vec![] }
+        Self { ns: Namespace::empty(), exported: false, local_name: None, referent: AbsPath::empty() }
     }
 
     pub fn named(name: &'a str) -> Self {
-        Self { ns: Namespace::empty(), exported: false, local_name: Some(name), referent: vec![] }
+        Self { ns: Namespace::empty(), exported: false, local_name: Some(name), referent: AbsPath::empty() }
     }
 
-    pub fn traverse_path(&self, path: &AbsPath<'a>) -> &Self {
+    pub fn traverse_path_mut(&mut self, path: &AbsPath<'a>) -> &mut Self {
+        assert!(self.local_name == Some(KEYWORD_ROOT));
         let mut item = self;
         let mut path_iter = path.iter_segments();
         path_iter.next().expect("Invariant: path always has at least one segment.");
-
         for segment in path_iter {
             let idx = item.ns.local[segment];
-            item = &item.ns.items[*idx];
+            item = &mut item.ns.items[idx];
         }
+        item
     }
+    pub fn traverse_path(&self, path: &AbsPath<'a>) -> &Self {
+        assert!(self.local_name == Some(KEYWORD_ROOT));
+        let mut item = self;
+        let mut path_iter = path.iter_segments();
+        path_iter.next().expect("Invariant: path always has at least one segment.");
+        for segment in path_iter {
+            let idx = item.ns.local[segment];
+            item = &item.ns.items[idx];
+        }
+        item
+    }
+}
+
+#[test]
+fn test_traverse_path_1() {
+    let mut root = Item::named(KEYWORD_ROOT);
+
+    let mut prelude = Item::named(LIBNAME_PRELUDE);
+
+    let mut prelude_item = Item::named("prelude_item");
+
+    prelude.ns.add_item(prelude_item);
+    root.ns.add_item(prelude);
+    let prelude_path = AbsPath::new(vec![KEYWORD_ROOT, LIBNAME_PRELUDE]);
+
+    assert_eq!(Some(LIBNAME_PRELUDE), root.traverse_path(&prelude_path).local_name);
 }
 
 impl<'a> fmt::Debug for Item<'a> {
@@ -62,6 +92,18 @@ impl<'a> Namespace<'a> {
             self.local.insert(name, idx);
         }
         idx
+    }
+
+    pub fn item(&self, name: &str) -> Option<&Item<'a>> {
+        self.local.get(name).map(|idx| &self.items[*idx])
+    }
+
+    pub fn item_mut<'ns>(&'ns mut self, name: &str) -> Option<&'ns mut Item<'a>> {
+        let idx = self.local.get(name).map(|i| *i);
+        match idx {
+            Some(idx) => Some(&mut self.items[idx]),
+            None => None,
+        }
     }
 
     pub fn empty() -> Self {
@@ -91,18 +133,37 @@ impl<'a> fmt::Debug for Namespace<'a> {
     }
 }
 
-
+#[derive(Clone)]
 pub struct AbsPath<'str> {
-    inner: Vec<'str>,
+    inner: Vec<&'str str>,
 }
 
 impl<'str> AbsPath<'str> {
+    pub fn empty() -> Self {
+        Self { inner: Vec::new() }
+    }
+
     pub fn new(path: Vec<&'str str>) -> Self {
+        assert_eq!(path[0], KEYWORD_ROOT);
         Self { inner: path }
     }
 
-    pub fn iter_segments(&self) -> impl Iterator<Item=&'str str> {
-        self.inner.iter()
+    pub fn iter_segments<'a>(&'a self) -> impl Iterator<Item=&'str str> + 'a {
+        self.inner.iter().map(|s| &**s)
+    }
+
+    pub fn push_segment(&mut self, seg: &'str str) {
+        if self.inner.is_empty() {
+            assert_eq!(seg, KEYWORD_ROOT);
+        }
+        self.inner.push(seg)
+    }
+}
+
+
+impl<'a> fmt::Debug for AbsPath<'a> {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        self.inner.fmt(formatter)
     }
 }
 
@@ -146,7 +207,6 @@ fn find_referent<'a, 'str: 'a>(name: &'str str, scopes: &'a Stack<&'a Item<'str>
 
 fn base_path<'str>(scopes: &Stack<&Item<'str>>) -> AbsPath<'str> {
     let mut path = Vec::new();
-    let mut local_name = scopes.frame.local_name;
     for item in scopes.iter() {
 
         path.push(item.local_name.expect("Invariant: the path that is used as a reference can't contain anonymous segments."));
@@ -155,9 +215,9 @@ fn base_path<'str>(scopes: &Stack<&Item<'str>>) -> AbsPath<'str> {
     AbsPath::new(path)
 }
 
-fn walk_path<'a, 'str, 'scope>(path: &'a RelPath<'str>, mut item: &'scope Item<'str>, abs_path: &mut Vec<&'str str>) -> Result<&'scope Item<'str>, Error> {
+fn walk_path<'a, 'str, 'scope>(path: &'a RelPath<'str>, mut item: &'scope Item<'str>, abs_path: &mut AbsPath<'str>) -> Result<&'scope Item<'str>, Error> {
 
-    abs_path.push(item.local_name.expect("Invariant: the path that is used as a reference can't contain anonymous segments."));
+    abs_path.push_segment(item.local_name.expect("Invariant: the path that is used as a reference can't contain anonymous segments."));
 
     let mut path_iter = path.0.iter();
     path_iter.next().expect("Invariant: path always has at least one segment.");
@@ -166,7 +226,7 @@ fn walk_path<'a, 'str, 'scope>(path: &'a RelPath<'str>, mut item: &'scope Item<'
         if let Some(idx) = item.ns.local.get(segment.0) {
             if item.ns.items[*idx].exported {
                 item = &item.ns.items[*idx];
-                abs_path.push(item.local_name.expect("Invariant: the path that is used as a reference can't contain anonymous segments."));
+                abs_path.push_segment(item.local_name.expect("Invariant: the path that is used as a reference can't contain anonymous segments."));
             } else {
                 return Err(PrivacyError(segment.0.to_owned()).into())
             }
@@ -215,22 +275,49 @@ fn resolve_recursive<'a, 'str: 'a, 'ns>(token_tree: &'a [Exp<'str>], scopes: Sta
     Ok(())
 }
 
-pub fn glob_import<'str>(source: &Namespace<'str>, target: &mut Namespace<'str>) -> Result<(), Error> {
-    for token in token_tree {
-        if let Some(KEYWORD_PRELUDE) = token.bound_name() {
-            for member in token.call_args() {
-                if let Some(name) = member.bound_name() {
-                    target.add_item(Item::named(name));
-                }
-            }
-        }
+pub fn glob_import<'str>(root: &Item<'str>, source: &AbsPath<'str>, target: &mut Item<'str>) {
+
+    let source_ns = &root.traverse_path(source).ns;
+
+    for (name, _idx) in &source_ns.local {
+        let mut source_item_path = source.clone();
+        source_item_path.push_segment(name);
+        let mut imported_item = Item::named(name);
+        imported_item.referent = source_item_path;
+        target.ns.add_item(imported_item);
     }
-    Ok(())
 }
 
-pub fn resolve<'a, 'str>(libname: &'str str, token_tree: &'a [Exp<'str>], root_ns: &'a Item<'str>) -> Result<Item<'str>, Error> {
+#[test]
+fn test_glob_import() {
+    use ::LIBNAME_PRELUDE;
+
+    let mut root = Item::named(KEYWORD_ROOT);
+
+    let mut prelude = Item::named(LIBNAME_PRELUDE);
+
+    let mut prelude_item = Item::named("prelude_item");
+
+    prelude.ns.add_item(prelude_item);
+    root.ns.add_item(prelude);
+    let prelude_path = AbsPath::new(vec![KEYWORD_ROOT, LIBNAME_PRELUDE]);
+
+    let mut lib = Item::named("lib");
+
+    glob_import(&root, &prelude_path, &mut lib);
+
+    assert_eq!(lib.ns.local.len(), 1);
+
+    assert!(lib.ns.item("prelude_item").is_some());
+}
+
+pub fn resolve<'a, 'str>(libname: &'str str, token_tree: &'a [Exp<'str>], root: &'a Item<'str>, prelude_path: Option<&AbsPath<'str>>) -> Result<Item<'str>, Error> {
     let scopes = Stack::new();
     let mut lib = Item::named(libname);
-    resolve_recursive(token_tree, scopes.push(root_ns), &mut lib)?;
+
+    if let Some(prelude_path) = prelude_path {
+        glob_import(&root, prelude_path, &mut lib);
+    }
+    resolve_recursive(token_tree, scopes.push(root), &mut lib)?;
     Ok(lib)
 }

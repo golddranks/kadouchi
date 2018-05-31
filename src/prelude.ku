@@ -1,11 +1,9 @@
-export(
-    stg.str as str
-    stg.int as int
-    stg.uint as uint
-    stg.float as float
-    stg.export as export
-    stg.and as and
-    stg.or as or
-    stg.col as col
-    stg.row as row
-)
+std.str as str
+std.int as int
+std.uint as uint
+std.float as float
+std.export as export
+std.and as and
+std.or as or
+std.col as col
+std.row as row

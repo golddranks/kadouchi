@@ -21,3 +21,7 @@ pub struct ShadowingError(pub String);
 #[derive(Debug, Fail)]
 #[fail(display = "Accessed item is private {}", _0)]
 pub struct PrivacyError(pub String);
+
+#[derive(Debug, Fail)]
+#[fail(display = "Library file name must end with .ku and use only alphanumeric and underscore. {}", _0)]
+pub struct InvalidLibraryFileName(pub String);

@@ -17,6 +17,7 @@ extern crate scoped_stack;
 
 use std::str::from_utf8;
 use std::fs;
+use std::path::Path;
 
 use failure::Error;
 
@@ -25,68 +26,65 @@ mod nameres;
 mod errors;
 mod typecheck;
 
-pub use nameres::{Item, Namespace};
+pub use nameres::{Item, Namespace, AbsPath};
 use tokens::Exp;
+use errors::{InvalidLibraryFileName};
 
 const KEYWORD_AS: &str = "as";
 const KEYWORD_EXPORT: &str = "export";
+const KEYWORD_ROOT: &str = "root";
+const KEYWORD_INTRISIC: &str = "intrinsic";
+
+const LIBNAME_STD: &str = "std";
+const LIBNAME_PRELUDE: &str = "prelude";
 
 
-pub fn parse_lib<'ns, 'str: 'ns>(libname: &'str str, bytes: &'str [u8], root: &'ns mut Item<'str>) -> Result<&'ns Item<'str>, Error> {
+pub fn parse_lib<'ns, 'str: 'ns>(libname: &'str str, bytes: &'str [u8], root: &'ns mut Item<'str>, prelude_path: Option<&AbsPath<'str>>) -> Result<AbsPath<'str>, Error> {
 
 	let string = from_utf8(bytes)?;
 
 	let token_tree: Vec<Exp<'str>> = tokens::parse_file(string)?;
 
-	let lib = nameres::resolve(libname, &token_tree, root)?;
+	let lib = nameres::resolve(libname, &token_tree, root, prelude_path)?;
 
-	let idx = root.ns.add_item(lib);
+	root.ns.add_item(lib);
 
-	Ok(idx)
+	Ok(AbsPath::new(vec![KEYWORD_ROOT, libname]))
 }
 
-pub fn parse_project<'a, 'str: 'a>(libs: &'a [(&'str str, &'str [u8])]) -> Result<Item<'str>, ()> {
-	let mut root = Item::named("root");
-	root.ns.add_item(Item::named("intrinsic"));
+fn get_libname(filename: &Path) -> Option<&str> {
+	filename.file_name().and_then(|f| Path::new(f).file_stem()).and_then(|f| f.to_str())
+}
 
-	for (name, text) in libs {
-		parse_lib(name, &text, &mut root).expect("Error when parsing lib");
-	}
+#[test]
+fn test_get_libname() {
+	assert_eq!(get_libname(Path::new("src/std.ku")), Some("std"))
+}
 
-	typecheck::check(&root.ns)?;
+pub fn parse_with_stdlib<'a>(filename: &'a Path, bytestore: &'a mut Vec<Vec<u8>>) -> Result<Item<'a>, Error> {
+	let mut root = Item::named(KEYWORD_ROOT);
+	root.ns.add_item(Item::named(KEYWORD_INTRISIC));
+
+	bytestore.push(fs::read("src/std.ku")?);
+	bytestore.push(fs::read("src/prelude.ku")?);
+	bytestore.push(fs::read(filename)?);
+
+	parse_lib(LIBNAME_STD, &bytestore[0], &mut root, None)?;
+
+	let prelude_path = parse_lib(LIBNAME_PRELUDE, &bytestore[1], &mut root, None)?;
+
+	let libname = get_libname(filename).ok_or_else(|| InvalidLibraryFileName(filename.to_string_lossy().to_string()))?;
+
+	parse_lib(libname, &bytestore[2], &mut root, Some(&prelude_path))?;
 
 	Ok(root)
 }
 
-pub fn parse_with_stdlib<'str>(bytes: &'str [u8]) -> Result<(), ()> {
-	let mut root = Item::named("root");
-	root.ns.add_item(Item::named("intrinsic"));
-
-	let std_bytes = fs::read("src/std.ku").expect("Error when opening std");
-	parse_lib("std", &std_bytes, &mut root).expect("Error when parsing std");
-
-	let prelude_bytes = fs::read("src/prelude.ku").expect("Error when opening prelude");
-	parse_lib("prelude", &prelude_bytes, &mut root).expect("Error when parsing prelude");
-
-	parse_lib("lib", &bytes, &mut root).expect("Error when parsing lib");
-
-	nameres::glob_import(&root.ns, &mut root.ns)?;
-
-	Ok(())
-}
-
 #[test]
 fn parse_single_lib_with_std() {
+	let mut bytestore = Vec::new();
 
-	let mut root = Item::named("root");
-	root.ns.add_item(Item::named("intrinsic"));
-
-	let std_bytes = fs::read("src/std.ku").expect("Error when opening std");
-	parse_lib("std", &std_bytes, &mut root).expect("Error when parsing std");
-
-	let lib_bytes = fs::read("tests/fixtures/simple.ku").expect("Error when opening lib");
-
-	parse_lib("simple", &lib_bytes, &mut root).expect("Error when parsing lib");
+	let root = parse_with_stdlib("tests/fixtures/simple.ku", &mut bytestore).unwrap();
 
 	println!("{:#?}", root);
 }
