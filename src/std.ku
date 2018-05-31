@@ -18,16 +18,16 @@ regexp("aaa") as int
 regexp("aaa") as uint
 regexp("aaa") as float
 
-export(date)
 
 export(
-	str as str
-	int as int
-	uint as uint
-	float as float
-	export as export
-	and as and
-	or as or
-	col as col
-	row as row
-) as prelude
+    date
+    str
+    int
+    uint
+    float
+    export
+    and
+    or
+    col
+    row
+)

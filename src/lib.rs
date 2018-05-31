@@ -30,10 +30,9 @@ use tokens::Exp;
 
 const KEYWORD_AS: &str = "as";
 const KEYWORD_EXPORT: &str = "export";
-const KEYWORD_PRELUDE: &str = "prelude";
 
 
-pub fn parse_lib<'ns, 'str: 'ns>(libname: &'str str, bytes: &'str [u8], root: &'ns mut Item<'str>) -> Result<(), Error> {
+pub fn parse_lib<'ns, 'str: 'ns>(libname: &'str str, bytes: &'str [u8], root: &'ns mut Item<'str>) -> Result<&'ns Item<'str>, Error> {
 
 	let string = from_utf8(bytes)?;
 
@@ -41,11 +40,9 @@ pub fn parse_lib<'ns, 'str: 'ns>(libname: &'str str, bytes: &'str [u8], root: &'
 
 	let lib = nameres::resolve(libname, &token_tree, root)?;
 
-	nameres::inject_prelude(&token_tree, &mut root.ns)?;
+	let idx = root.ns.add_item(lib);
 
-	root.ns.add_item(lib);
-
-	Ok(())
+	Ok(idx)
 }
 
 pub fn parse_project<'a, 'str: 'a>(libs: &'a [(&'str str, &'str [u8])]) -> Result<Item<'str>, ()> {
@@ -66,11 +63,14 @@ pub fn parse_with_stdlib<'str>(bytes: &'str [u8]) -> Result<(), ()> {
 	root.ns.add_item(Item::named("intrinsic"));
 
 	let std_bytes = fs::read("src/std.ku").expect("Error when opening std");
-
 	parse_lib("std", &std_bytes, &mut root).expect("Error when parsing std");
+
+	let prelude_bytes = fs::read("src/prelude.ku").expect("Error when opening prelude");
+	parse_lib("prelude", &prelude_bytes, &mut root).expect("Error when parsing prelude");
 
 	parse_lib("lib", &bytes, &mut root).expect("Error when parsing lib");
 
+	nameres::glob_import(&root.ns, &mut root.ns)?;
 
 	Ok(())
 }

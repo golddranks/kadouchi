@@ -6,7 +6,7 @@ use failure::Error;
 
 use ::KEYWORD_EXPORT;
 use ::KEYWORD_PRELUDE;
-use tokens::{Call, Exp, Path};
+use tokens::{Call, Exp, Path as RelPath};
 use errors::{UnknownNameError, PathResolutionError, InvalidExportError, ShadowingError, PrivacyError};
 
 // Invariant: local is always superset of exported
@@ -19,7 +19,7 @@ pub struct Item<'a> {
     local_name: Option<&'a str>,
     exported: bool,
     pub ns: Namespace<'a>,
-    pub referent: Vec<&'a str>,
+    pub referent: AbsPath<'a>,
 }
 
 impl<'a> Item<'a> {
@@ -29,6 +29,17 @@ impl<'a> Item<'a> {
 
     pub fn named(name: &'a str) -> Self {
         Self { ns: Namespace::empty(), exported: false, local_name: Some(name), referent: vec![] }
+    }
+
+    pub fn traverse_path(&self, path: &AbsPath<'a>) -> &Self {
+        let mut item = self;
+        let mut path_iter = path.iter_segments();
+        path_iter.next().expect("Invariant: path always has at least one segment.");
+
+        for segment in path_iter {
+            let idx = item.ns.local[segment];
+            item = &item.ns.items[*idx];
+        }
     }
 }
 
@@ -80,6 +91,22 @@ impl<'a> fmt::Debug for Namespace<'a> {
     }
 }
 
+
+pub struct AbsPath<'str> {
+    inner: Vec<'str>,
+}
+
+impl<'str> AbsPath<'str> {
+    pub fn new(path: Vec<&'str str>) -> Self {
+        Self { inner: path }
+    }
+
+    pub fn iter_segments(&self) -> impl Iterator<Item=&'str str> {
+        self.inner.iter()
+    }
+}
+
+
 fn handle_export<'a>(call: &Call<'a>, ns: &mut Namespace<'a>) -> Result<(), InvalidExportError> {
     if call.path.only_segment() == Some(KEYWORD_EXPORT) {
         for exported_item in &call.args {
@@ -117,16 +144,18 @@ fn find_referent<'a, 'str: 'a>(name: &'str str, scopes: &'a Stack<&'a Item<'str>
     Err(UnknownNameError(name.to_owned()))
 }
 
-fn base_path<'str>(scopes: &Stack<&Item<'str>>) -> Vec<&'str str> {
+fn base_path<'str>(scopes: &Stack<&Item<'str>>) -> AbsPath<'str> {
     let mut path = Vec::new();
+    let mut local_name = scopes.frame.local_name;
     for item in scopes.iter() {
+
         path.push(item.local_name.expect("Invariant: the path that is used as a reference can't contain anonymous segments."));
     }
     path.reverse();
-    path
+    AbsPath::new(path)
 }
 
-fn walk_path<'a, 'str, 'scope>(path: &'a Path<'str>, mut item: &'scope Item<'str>, abs_path: &mut Vec<&'str str>) -> Result<&'scope Item<'str>, Error> {
+fn walk_path<'a, 'str, 'scope>(path: &'a RelPath<'str>, mut item: &'scope Item<'str>, abs_path: &mut Vec<&'str str>) -> Result<&'scope Item<'str>, Error> {
 
     abs_path.push(item.local_name.expect("Invariant: the path that is used as a reference can't contain anonymous segments."));
 
@@ -186,7 +215,7 @@ fn resolve_recursive<'a, 'str: 'a, 'ns>(token_tree: &'a [Exp<'str>], scopes: Sta
     Ok(())
 }
 
-pub fn inject_prelude<'a, 'str>(token_tree: &'a [Exp<'str>], target: &'a mut Namespace<'str>) -> Result<(), Error> {
+pub fn glob_import<'str>(source: &Namespace<'str>, target: &mut Namespace<'str>) -> Result<(), Error> {
     for token in token_tree {
         if let Some(KEYWORD_PRELUDE) = token.bound_name() {
             for member in token.call_args() {
