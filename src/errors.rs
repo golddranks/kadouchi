@@ -23,5 +23,7 @@ pub struct ShadowingError(pub String);
 pub struct PrivacyError(pub String);
 
 #[derive(Debug, Fail)]
-#[fail(display = "Library file name must end with .ku and use only alphanumeric and underscore. {}", _0)]
+#[fail(
+    display = "Library file name must end with .ku and use only alphanumeric and underscore. {}", _0
+)]
 pub struct InvalidLibraryFileName(pub String);
