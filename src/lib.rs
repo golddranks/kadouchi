@@ -10,11 +10,15 @@ extern crate libloading;
 
 /* TODO LIST
 
+ REFACTOR
+ - use a newtype to represent allowed symbols instead of arbitrary &str
+
  PARSING
  - support for escaping in string literals
 
  ERROR HANDLING
  - support clean error messages
+ - review the error places and add error cases where needed
  - support spans etc. better reporting
 
  NAMERES
