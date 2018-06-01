@@ -84,8 +84,8 @@ pub fn parse_with_stdlib<'a>(
 ) -> Result<Item<'a>, Error> {
     let mut root = Item::named(KEYWORD_ROOT);
 
-    bytestore.push(fs::read("src/libstd/std.ku")?);
-    bytestore.push(fs::read("src/libstd/prelude.ku")?);
+    bytestore.push(fs::read("src/stdlib/std.ku")?);
+    bytestore.push(fs::read("src/stdlib/prelude.ku")?);
     bytestore.push(fs::read(filename)?);
 
     let mut intrinsic = Item::named(KEYWORD_INTRINSIC);
