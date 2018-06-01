@@ -6,6 +6,7 @@ use scoped_stack::Stack;
 
 use KEYWORD_EXPORT;
 use KEYWORD_ROOT;
+use KEYWORD_INTRINSIC;
 
 use errors::{
     InvalidExportError, PathResolutionError, PrivacyError, ShadowingError, UnknownNameError,
@@ -20,11 +21,11 @@ pub struct Namespace<'a> {
 
 #[derive(Clone)]
 pub struct Item<'a> {
-    local_name: Option<&'a str>,
-    exported: bool,
+    pub local_name: Option<&'a str>,
+    pub exported: bool,
     pub ns: Namespace<'a>,
     pub referent: Option<AbsPath<'a>>,
-    literal: Option<Lit<'a>>,
+    pub literal: Option<Lit<'a>>,
 }
 
 impl<'a> Item<'a> {
@@ -179,6 +180,14 @@ impl<'str> AbsPath<'str> {
     pub fn new(path: Vec<&'str str>) -> Self {
         assert_eq!(path[0], KEYWORD_ROOT);
         Self { inner: path }
+    }
+
+    pub fn intrinsic_reference() -> Self {
+        Self { inner: vec![KEYWORD_INTRINSIC] }
+    }
+
+    pub fn is_intrinsic(&self) -> bool {
+        self.inner[0] == KEYWORD_INTRINSIC
     }
 
     pub fn iter_segments<'a>(&'a self) -> impl Iterator<Item = &'str str> + 'a {

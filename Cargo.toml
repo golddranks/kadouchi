@@ -8,3 +8,4 @@ regex = "1.0"
 nom = "4.0"
 scoped_stack = { git = "https://github.com/golddranks/scoped_stack" }
 failure = "0.1"
+libloading = "0.5"

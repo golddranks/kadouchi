@@ -6,11 +6,11 @@ extern crate nom;
 extern crate failure;
 extern crate regex;
 extern crate scoped_stack;
+extern crate libloading;
 
 /* TODO LIST
 
  PARSING
- - support for numeric literals
  - support for escaping in string literals
 
  ERROR HANDLING
@@ -18,7 +18,6 @@ extern crate scoped_stack;
  - support spans etc. better reporting
 
  NAMERES
- - support literals as arguments
 
  TYPECHECK
  - implement even something
@@ -46,7 +45,7 @@ use tokens::Exp;
 const KEYWORD_AS: &str = "as";
 const KEYWORD_EXPORT: &str = "export";
 const KEYWORD_ROOT: &str = "root";
-const KEYWORD_INTRISIC: &str = "intrinsic";
+const KEYWORD_INTRINSIC: &str = "intrinsic";
 
 const LIBNAME_STD: &str = "std";
 const LIBNAME_PRELUDE: &str = "prelude";
@@ -84,11 +83,14 @@ pub fn parse_with_stdlib<'a>(
     bytestore: &'a mut Vec<Vec<u8>>,
 ) -> Result<Item<'a>, Error> {
     let mut root = Item::named(KEYWORD_ROOT);
-    root.ns.add_item(Item::named(KEYWORD_INTRISIC));
 
-    bytestore.push(fs::read("src/std.ku")?);
-    bytestore.push(fs::read("src/prelude.ku")?);
+    bytestore.push(fs::read("src/libstd/std.ku")?);
+    bytestore.push(fs::read("src/libstd/prelude.ku")?);
     bytestore.push(fs::read(filename)?);
+
+    let mut intrinsic = Item::named(KEYWORD_INTRINSIC);
+    intrinsic.referent = Some(AbsPath::intrinsic_reference()); // Inject the special compiler magic
+    root.ns.add_item(intrinsic);
 
     parse_lib(LIBNAME_STD, &bytestore[0], &mut root, None)?;
 
@@ -98,6 +100,8 @@ pub fn parse_with_stdlib<'a>(
         .ok_or_else(|| InvalidLibraryFileName(filename.to_string_lossy().to_string()))?;
 
     parse_lib(libname, &bytestore[2], &mut root, Some(&prelude_path))?;
+
+    typecheck::check(&root)?;
 
     Ok(root)
 }
