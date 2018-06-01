@@ -1,12 +1,14 @@
+use std::fmt;
+
 use errors::SyntaxError;
 use nom::types::CompleteStr;
-use nom::{alpha1, alphanumeric1};
+use nom::{alpha1, alphanumeric1, digit1, recognize_float};
 use KEYWORD_AS;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Sym<'a>(pub &'a str);
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Path<'a>(pub Vec<Sym<'a>>);
 
 impl<'a> Path<'a> {
@@ -33,22 +35,37 @@ impl<'a> Path<'a> {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
-pub struct Lit<'a>(&'a str);
+#[derive(Eq, PartialEq, Clone)]
+pub enum Lit<'a>{
+    Str(&'a str),
+    Int(&'a str),
+    Float(&'a str),
+}
 
-#[derive(Debug, Eq, PartialEq)]
+impl<'a> fmt::Debug for Lit<'a> {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match self {
+            Lit::Str(s) => { formatter.write_str("\"")?; formatter.write_str(s)?; formatter.write_str("\"")?; },
+            Lit::Int(s) => formatter.write_str(s)?,
+            Lit::Float(s) => formatter.write_str(s)?,
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Call<'a> {
     pub path: Path<'a>,
     pub args: Vec<Exp<'a>>,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum AnonExp<'a> {
     Call(Call<'a>),
     Literal(Lit<'a>),
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Exp<'a>(AnonExp<'a>, Option<Sym<'a>>);
 
 impl<'a> Exp<'a> {
@@ -60,6 +77,13 @@ impl<'a> Exp<'a> {
         match &self.0 {
             AnonExp::Literal(_) => None,
             AnonExp::Call(call) => Some(call),
+        }
+    }
+
+    pub fn lit(&self) -> Option<&Lit<'a>> {
+        match &self.0 {
+            AnonExp::Literal(lit) => Some(lit),
+            AnonExp::Call(_) => None,
         }
     }
 
@@ -109,18 +133,43 @@ fn test_parse_symbol_4() {
 
 named!(str_literal<CompleteStr, Lit>, do_parse!(
         lit: delimited!(tag!("\""), is_not!("\""), tag!("\"")) >>
-        (Lit(&lit))
+        (Lit::Str(&lit))
     ));
 
 #[test]
 fn test_parse_str_literal() {
     let result = str_literal(CompleteStr("\"test\""));
 
-    assert_eq!(result, Ok((CompleteStr(""), Lit("test"))));
+    assert_eq!(result, Ok((CompleteStr(""), Lit::Str("test"))));
+}
+
+named!(int_literal<CompleteStr, Lit>, do_parse!(
+        lit: digit1 >>
+        (Lit::Int(&lit))
+    ));
+
+#[test]
+fn test_parse_int_literal() {
+    let result = int_literal(CompleteStr("3483"));
+
+    assert_eq!(result, Ok((CompleteStr(""), Lit::Int("3483"))));
+}
+
+named!(float_literal<CompleteStr, Lit>, do_parse!(
+        lit: recognize_float >>
+        (Lit::Float(&lit))
+    ));
+
+
+#[test]
+fn test_parse_float_literal() {
+    let result = float_literal(CompleteStr("3483.4"));
+
+    assert_eq!(result, Ok((CompleteStr(""), Lit::Float("3483.4"))));
 }
 
 named!(literal<CompleteStr, Lit>, do_parse!(
-        lit: str_literal >>
+        lit: alt!(str_literal | float_literal | int_literal) >>
         (lit)
     ));
 
@@ -379,7 +428,7 @@ fn test_parse_exp_6() {
             Exp(
                 AnonExp::Call(Call {
                     path: Path(vec![Sym("or")]),
-                    args: vec![Exp(AnonExp::Literal(Lit("mon")), None)],
+                    args: vec![Exp(AnonExp::Literal(Lit::Str("mon")), None)],
                 }),
                 Some(Sym("day"))
             )

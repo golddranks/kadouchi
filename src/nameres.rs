@@ -10,7 +10,7 @@ use KEYWORD_ROOT;
 use errors::{
     InvalidExportError, PathResolutionError, PrivacyError, ShadowingError, UnknownNameError,
 };
-use tokens::{Call, Exp, Path as RelPath};
+use tokens::{Call, Exp, Path as RelPath, Lit};
 
 #[derive(Clone)]
 pub struct Namespace<'a> {
@@ -23,7 +23,8 @@ pub struct Item<'a> {
     local_name: Option<&'a str>,
     exported: bool,
     pub ns: Namespace<'a>,
-    pub referent: AbsPath<'a>,
+    pub referent: Option<AbsPath<'a>>,
+    literal: Option<Lit<'a>>,
 }
 
 impl<'a> Item<'a> {
@@ -32,7 +33,8 @@ impl<'a> Item<'a> {
             ns: Namespace::empty(),
             exported: false,
             local_name: None,
-            referent: AbsPath::empty(),
+            referent: None,
+            literal: None,
         }
     }
 
@@ -41,12 +43,16 @@ impl<'a> Item<'a> {
             ns: Namespace::empty(),
             exported: false,
             local_name: Some(name),
-            referent: AbsPath::empty(),
+            referent: None,
+            literal: None,
         }
     }
 
+    pub fn set_lit(&mut self, lit: &Lit<'a>) {
+        self.literal = Some(lit.clone());
+    }
+
     pub fn traverse_path_mut(&mut self, path: &AbsPath<'a>) -> &mut Self {
-        assert!(self.local_name == Some(KEYWORD_ROOT));
         let mut item = self;
         let mut path_iter = path.iter_segments();
         path_iter
@@ -59,7 +65,6 @@ impl<'a> Item<'a> {
         item
     }
     pub fn traverse_path(&self, path: &AbsPath<'a>) -> &Self {
-        assert!(self.local_name == Some(KEYWORD_ROOT));
         let mut item = self;
         let mut path_iter = path.iter_segments();
         path_iter
@@ -95,10 +100,21 @@ fn test_traverse_path_1() {
 
 impl<'a> fmt::Debug for Item<'a> {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        formatter.write_str("Refers: ")?;
-        self.referent.fmt(formatter)?;
-        formatter.write_str(" NS: ")?;
-        self.ns.fmt(formatter)
+
+        if let Some(ref r) = self.referent {
+            formatter.write_str("Refers: ")?;
+            r.fmt(formatter)?;
+        }
+
+        if let Some(ref l) = self.literal {
+            formatter.write_str("Literal: ")?;
+            l.fmt(formatter)?;
+        } else {
+            formatter.write_str(" ")?;
+            self.ns.fmt(formatter)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -134,7 +150,7 @@ impl<'a> Namespace<'a> {
 
 impl<'a> fmt::Debug for Namespace<'a> {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        if self.local.is_empty() {
+        if self.items.is_empty() {
             formatter.write_str("Namespace (empty)")
         } else {
             formatter.write_str("Namespace ")?;
@@ -160,10 +176,6 @@ pub struct AbsPath<'str> {
 }
 
 impl<'str> AbsPath<'str> {
-    pub fn empty() -> Self {
-        Self { inner: Vec::new() }
-    }
-
     pub fn new(path: Vec<&'str str>) -> Self {
         assert_eq!(path[0], KEYWORD_ROOT);
         Self { inner: path }
@@ -307,7 +319,11 @@ fn resolve_recursive<'a, 'str: 'a, 'ns>(
             // Checks if the current item is an export command
             handle_export(call, &mut parent.ns)?;
 
-            item.referent = path;
+            item.referent = Some(path);
+        }
+
+        if let Some(lit) = token.lit() {
+            item.set_lit(lit);
         }
 
         resolve_recursive(token.call_args(), scopes.push(&parent), &mut item)?;
@@ -323,7 +339,7 @@ pub fn glob_import<'str>(root: &Item<'str>, source: &AbsPath<'str>, target: &mut
         let mut source_item_path = source.clone();
         source_item_path.push_segment(name);
         let mut imported_item = Item::named(name);
-        imported_item.referent = source_item_path;
+        imported_item.referent = Some(source_item_path);
         target.ns.add_item(imported_item);
     }
 }
