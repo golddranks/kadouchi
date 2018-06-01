@@ -1,5 +1,5 @@
 use failure::{err_msg, Error};
-use libloading;
+use libloading::{self, Library};
 
 use nameres::Item;
 use tokens::Lit;
@@ -7,30 +7,20 @@ use errors::{WrongNumberOfArguments, WrongTypeOfArguments};
 
 pub struct Object;
 
-fn call_dynamic() -> libloading::Result<u32> {
-    let lib = libloading::Library::new("std.so")?; // FIXME generalize this to any library
-    unsafe {
-        let func: libloading::Symbol<unsafe extern fn() -> u32> = lib.get(b"my_func")?;
-        Ok(func())
-    }
-}
+pub fn call_intrinsic(natives: &Library, call: &str) -> Result<Object, Error> {
 
-pub fn call_intrinsic(call: &str) -> Result<Object, Error> {
-    match call {
-    //    "regexp" => (),
-        "row" => (),
-    //   "col" => (),
-     //   "or" => (),
-    //    "and" => (),
-        "module" => (),
-        "export" => (),
-        _ => return Err(err_msg("Wrong intrinsic")), // FIXME create a real error type
-    }
+    let lib = natives; // FIXME some day there is many
+    let result = unsafe {
+        let func: libloading::Symbol<unsafe extern fn() -> u32> = lib.get(call.as_bytes())?;
+        func()
+    };
+
+    println!("Intrinsic result: {:?}", result);
 
     Ok(Object)
 }
 
-pub fn check_intrinsic(item: &Item) -> Result<(), Error> {
+pub fn check_intrinsic(natives: &Library, item: &Item) -> Result<(), Error> {
     if item.ns.items.len() == 0 {
         return Ok(());
     }
@@ -38,7 +28,7 @@ pub fn check_intrinsic(item: &Item) -> Result<(), Error> {
         return Err(WrongNumberOfArguments(item.local_name.unwrap_or("(anon)").to_owned(), 1, item.ns.items.len()).into());
     }
     match item.ns.items[0].literal {
-        Some(Lit::Str(call)) => call_intrinsic(call),
+        Some(Lit::Str(call)) => call_intrinsic(natives,call)?,
         _ => return Err(WrongTypeOfArguments(
                 item.local_name.unwrap_or("(anon)").to_owned(),
                 1,
@@ -50,18 +40,21 @@ pub fn check_intrinsic(item: &Item) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn check_recursive<'str>(parent: &Item<'str>) -> Result<(), Error> {
+pub fn check_recursive<'str>(natives: &Library, parent: &Item<'str>) -> Result<(), Error> {
 
     for item in &parent.ns.items {
         if item.referent.as_ref().map(|r| r.is_intrinsic()).unwrap_or(false) {
-            check_intrinsic(item)?;
+            check_intrinsic(natives, item)?;
         }
-        check_recursive(item)?;
+        check_recursive(natives,item)?;
     }
     Ok(())
 }
 
 pub fn check<'str>(root: &Item<'str>) -> Result<(), Error> {
-    check_recursive(root)?;
+
+    let lib = libloading::Library::new("src/stdlib/libstd.dylib")?; // FIXME generalize this to any library
+
+    check_recursive(&lib, root)?;
     Ok(())
 }
