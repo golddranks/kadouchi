@@ -4,6 +4,10 @@
 extern crate nom;
 #[macro_use]
 extern crate failure;
+#[macro_use]
+extern crate log;
+
+extern crate env_logger;
 extern crate regex;
 extern crate scoped_stack;
 extern crate libloading;
@@ -111,6 +115,9 @@ pub fn parse_with_stdlib<'a>(
 
 #[test]
 fn parse_typecheck_name_ref() {
+    env_logger::init();
+    trace!("parse_typecheck_name_ref test started and enabled logging.");
+
     let mut bytestore = Vec::new();
     let mut root = Item::named(KEYWORD_ROOT);
 
@@ -128,6 +135,9 @@ fn parse_typecheck_name_ref() {
 
 #[test]
 fn parse_simple_lib_with_std() {
+    env_logger::init();
+    trace!("parse_simple_lib_with_std test started and enabled logging.");
+
     let mut bytestore = Vec::new();
 
     let root = parse_with_stdlib(Path::new("tests/fixtures/simple.ku"), &mut bytestore).unwrap();

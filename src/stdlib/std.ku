@@ -1,6 +1,6 @@
-intrinsic("regexp") as regexp
 intrinsic("row") as row
 intrinsic("col") as col
+intrinsic("regexp") as regexp
 intrinsic("or") as or
 intrinsic("and") as and
 intrinsic("module") as module

@@ -84,7 +84,7 @@ impl<'a> Item<'a> {
         let idx = self.ns.items.len();
         
         if !child.path.is_parent(&self.path) {
-            println!("WARNING UPDATING PATHS THIS MIGHT BE A PERFORMANCE HIT child: {:?} parent: {:?}", child.path, self.path);
+            warn!("UPDATING PATHS THIS MIGHT BE A PERFORMANCE HIT child: {:?} parent: {:?}", child.path, self.path);
             child.update_paths_recursive(&self.path, idx);
         }
         if let Some(name) = child.local_name {
@@ -118,11 +118,14 @@ fn test_traverse_path_1() {
 impl<'a> fmt::Debug for Item<'a> {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
 
-        if let Some(ref n) = self.local_name {
-            formatter.write_str("Name: ")?;
-            n.fmt(formatter)?;
-            formatter.write_str(" ")?;
-        }
+        let locname = self.local_name.unwrap_or("(anon)");
+        formatter.write_str("Name: ")?;
+        locname.fmt(formatter)?;
+        formatter.write_str(" ")?;
+
+        formatter.write_str("Path: ")?;
+        self.path.fmt(formatter)?;
+        formatter.write_str(" ")?;
 
         if let Some(ref r) = self.referent {
             formatter.write_str("Refers: ")?;
@@ -371,13 +374,11 @@ fn base_path_2<'str>(scopes: &Stack<&Item<'str>>) -> AbsPath2 {
     let mut iter = scopes.iter();
     let mut local_name = iter.next().expect("Assert: there must be at least one surrounding scope").local_name.expect("Assert: Can't walk down anonymous segments!");
     for item in iter {
-        println!("local name {:?} {:#?}", local_name, item);
         let idx = item.ns.local.get(local_name).expect("Assert: The path segments must exist!");
         path.push(*idx);
         local_name = item.local_name.expect("Assert: Can't walk down anonymous segments!");
     }
     path.reverse();
-    println!("path {:?}", path);
     AbsPath2::new(path)
 }
 
@@ -455,7 +456,6 @@ fn resolve_recursive<'a, 'str: 'a, 'ns>(
             // Searches for the referent item from the surrounding scopes using the first segment of the path
             let (base_referent, scope) = find_referent(call.path.head(), &scopes)?;
 
-            println!("SCOPE {:?}, BASE REFERENT {:?}", scope, base_referent);
             let mut path = base_referent.path.clone();
 
             // Walks the path while visiting recursively the inner namespaces of the item
@@ -500,8 +500,6 @@ fn test_resolve_recursive() {
 
     assert_eq!(lib.ns.items[0].referent, Some(AbsPath2::new(vec![0])));
     assert_eq!(lib.ns.items[1].referent, Some(AbsPath2::new(vec![1, 0])));
-
-    println!("TEST RESOLVE RECURSIVE {:#?}", lib);
 }
 
 pub fn glob_import<'str>(root: &Item<'str>, source: &AbsPath2, target: &mut Item<'str>) {
