@@ -43,7 +43,7 @@ mod tokens;
 mod typecheck;
 
 use errors::InvalidLibraryFileName;
-pub use nameres::{AbsPath, Item, Namespace};
+pub use nameres::{AbsPath2, Item, Namespace};
 use tokens::Exp;
 
 const KEYWORD_AS: &str = "as";
@@ -58,16 +58,16 @@ pub fn parse_lib<'ns, 'str: 'ns>(
     libname: &'str str,
     bytes: &'str [u8],
     root: &'ns mut Item<'str>,
-    prelude_path: Option<&AbsPath<'str>>,
-) -> Result<AbsPath<'str>, Error> {
+    prelude_path: Option<&AbsPath2>,
+) -> Result<AbsPath2, Error> {
     let string = from_utf8(bytes)?;
 
     let token_tree: Vec<Exp<'str>> = tokens::parse_file(string)?;
 
     let lib = nameres::resolve(libname, &token_tree, root, prelude_path)?;
-    root.ns.add_item(lib);
+    let idx = root.add_child(lib);
 
-    Ok(AbsPath::new(vec![KEYWORD_ROOT, libname]))
+    Ok(AbsPath2::new(vec![idx]))
 }
 
 fn get_libname(filename: &Path) -> Option<&str> {
@@ -93,8 +93,7 @@ pub fn parse_with_stdlib<'a>(
     bytestore.push(fs::read(filename)?);
 
     let mut intrinsic = Item::named(KEYWORD_INTRINSIC);
-    intrinsic.referent = Some(AbsPath::intrinsic_reference()); // Inject the special compiler magic
-    root.ns.add_item(intrinsic);
+    root.add_child(intrinsic);
 
     parse_lib(LIBNAME_STD, &bytestore[0], &mut root, None)?;
 
@@ -105,13 +104,30 @@ pub fn parse_with_stdlib<'a>(
 
     parse_lib(libname, &bytestore[2], &mut root, Some(&prelude_path))?;
 
-    typecheck::check(&root)?;
+    typecheck::check(&mut root)?;
 
     Ok(root)
 }
 
 #[test]
-fn parse_single_lib_with_std() {
+fn parse_typecheck_name_ref() {
+    let mut bytestore = Vec::new();
+    let mut root = Item::named(KEYWORD_ROOT);
+
+    bytestore.push(fs::read("tests/fixtures/name_ref.ku").unwrap());
+
+    let mut intrinsic = Item::named(KEYWORD_INTRINSIC);
+    root.add_child(intrinsic);
+
+    parse_lib(LIBNAME_STD, &bytestore[0], &mut root, None).unwrap();
+
+    typecheck::check(&mut root).unwrap();
+
+    println!("{:#?}", root);
+}
+
+#[test]
+fn parse_simple_lib_with_std() {
     let mut bytestore = Vec::new();
 
     let root = parse_with_stdlib(Path::new("tests/fixtures/simple.ku"), &mut bytestore).unwrap();
