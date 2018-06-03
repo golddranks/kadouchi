@@ -8,9 +8,9 @@ extern crate failure;
 extern crate log;
 
 extern crate env_logger;
+extern crate libloading;
 extern crate regex;
 extern crate scoped_stack;
-extern crate libloading;
 
 /* TODO LIST
 

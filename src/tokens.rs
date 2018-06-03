@@ -36,7 +36,7 @@ impl<'a> Path<'a> {
 }
 
 #[derive(Eq, PartialEq, Clone)]
-pub enum Lit<'a>{
+pub enum Lit<'a> {
     Str(&'a str),
     Int(&'a str),
     Float(&'a str),
@@ -45,7 +45,11 @@ pub enum Lit<'a>{
 impl<'a> fmt::Debug for Lit<'a> {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
-            Lit::Str(s) => { formatter.write_str("\"")?; formatter.write_str(s)?; formatter.write_str("\"")?; },
+            Lit::Str(s) => {
+                formatter.write_str("\"")?;
+                formatter.write_str(s)?;
+                formatter.write_str("\"")?;
+            }
             Lit::Int(s) => formatter.write_str(s)?,
             Lit::Float(s) => formatter.write_str(s)?,
         }
@@ -159,7 +163,6 @@ named!(float_literal<CompleteStr, Lit>, do_parse!(
         lit: recognize_float >>
         (Lit::Float(&lit))
     ));
-
 
 #[test]
 fn test_parse_float_literal() {

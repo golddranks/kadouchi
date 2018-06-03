@@ -1,5 +1,5 @@
-extern crate kadouchi;
 extern crate env_logger;
+extern crate kadouchi;
 
 use std::path::Path;
 
@@ -7,14 +7,22 @@ use std::path::Path;
 fn test_typecheck_simple_succeed() {
     let mut bytestore = Vec::new();
 
-    kadouchi::parse_with_stdlib(Path::new("tests/fixtures/typecheck_simple_success.ku"), &mut bytestore).unwrap();
+    kadouchi::parse_with_stdlib(
+        Path::new("tests/fixtures/typecheck_simple_success.ku"),
+        &mut bytestore,
+    ).unwrap();
 }
 
 #[test]
 fn test_typecheck_simple_fail() {
-	env_logger::init();
+    env_logger::init();
 
     let mut bytestore = Vec::new();
 
-    assert!(kadouchi::parse_with_stdlib(Path::new("tests/fixtures/typecheck_simple_fail.ku"), &mut bytestore).is_err());
+    assert!(
+        kadouchi::parse_with_stdlib(
+            Path::new("tests/fixtures/typecheck_simple_fail.ku"),
+            &mut bytestore
+        ).is_err()
+    );
 }

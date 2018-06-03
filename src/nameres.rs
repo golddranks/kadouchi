@@ -9,7 +9,7 @@ use KEYWORD_EXPORT;
 use errors::{
     InvalidExportError, PathResolutionError, PrivacyError, ShadowingError, UnknownNameError,
 };
-use tokens::{Call, Exp, Path as RelPath, Lit};
+use tokens::{Call, Exp, Lit, Path as RelPath};
 
 #[derive(Clone, Eq, PartialEq)]
 pub struct Namespace<'a> {
@@ -75,7 +75,7 @@ impl<'a> Item<'a> {
 
     pub fn add_child(&mut self, child: Item<'a>) {
         let idx = self.ns.items.len();
-        
+
         debug_assert!(child.path.is_parent(&self.path));
 
         if let Some(name) = child.local_name {
@@ -87,15 +87,14 @@ impl<'a> Item<'a> {
 
 #[test]
 fn test_traverse_path_1() {
-    use LIBNAME_PRELUDE;
     use KEYWORD_ROOT;
+    use LIBNAME_PRELUDE;
 
     let mut root = Item::named(KEYWORD_ROOT);
 
     let mut prelude = Item::named(LIBNAME_PRELUDE);
     prelude.path = AbsPath2::new(vec![0]);
     let prelude_path = prelude.path.clone();
-
 
     let mut prelude_item = Item::named("prelude_item");
     prelude_item.path = AbsPath2::new(vec![0, 0]);
@@ -111,7 +110,6 @@ fn test_traverse_path_1() {
 
 impl<'a> fmt::Debug for Item<'a> {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-
         let locname = self.local_name.unwrap_or("(anon)");
         formatter.write_str("Name: ")?;
         locname.fmt(formatter)?;
@@ -140,7 +138,6 @@ impl<'a> fmt::Debug for Item<'a> {
 }
 
 impl<'a> Namespace<'a> {
-
     pub fn item(&self, name: &str) -> Option<&Item<'a>> {
         self.local.get(name).map(|idx| &self.items[*idx])
     }
@@ -206,14 +203,16 @@ impl AbsPath2 {
     }
 
     pub fn pop_segment(&mut self) -> usize {
-        self.inner.pop().expect("Invariant: the root shouldn't be popped")
+        self.inner
+            .pop()
+            .expect("Invariant: the root shouldn't be popped")
     }
 
     pub fn is_parent(&self, parent_path: &AbsPath2) -> bool {
         if self.inner.len() != parent_path.inner.len() + 1 {
             return false;
         }
-        &self.inner[0..self.inner.len()-1] == &parent_path.inner[..]
+        &self.inner[0..self.inner.len() - 1] == &parent_path.inner[..]
     }
 }
 
@@ -304,7 +303,6 @@ fn test_find_referent() {
     assert!(find_referent("root", &scopes_4).is_err());
     assert!(find_referent("e", &scopes_4).is_err());
 
-
     let (item, scope) = find_referent("c", &scopes_4).unwrap();
 
     assert_eq!(item, &root.ns.items[0].ns.items[0].ns.items[0]);
@@ -317,7 +315,6 @@ fn walk_path<'a, 'str, 'scope>(
     mut item: &'scope Item<'str>,
     abs_path: &mut AbsPath2,
 ) -> Result<&'scope Item<'str>, Error> {
-
     let mut path_iter = path.0.iter();
     path_iter
         .next()
@@ -378,7 +375,12 @@ fn resolve_recursive<'a, 'str: 'a, 'ns>(
         }
         current_path.push_segment(parent.next_idx());
         item.path = current_path.clone();
-        resolve_recursive(token.call_args(), scopes.push(&parent), &mut item, current_path)?;
+        resolve_recursive(
+            token.call_args(),
+            scopes.push(&parent),
+            &mut item,
+            current_path,
+        )?;
         trace!("Adding a child {:?} to parent {:?}", item, parent);
         parent.add_child(item);
         current_path.pop_segment();
@@ -388,11 +390,12 @@ fn resolve_recursive<'a, 'str: 'a, 'ns>(
 
 #[test]
 fn test_resolve_recursive_1() {
-    use KEYWORD_ROOT;
-    use KEYWORD_INTRINSIC;
     use tokens;
+    use KEYWORD_INTRINSIC;
+    use KEYWORD_ROOT;
 
-    let token_tree: Vec<Exp<'static>> = tokens::parse_file(r#"intrinsic("regexp") as regexp    regexp("aaa") as str"#).unwrap();
+    let token_tree: Vec<Exp<'static>> =
+        tokens::parse_file(r#"intrinsic("regexp") as regexp    regexp("aaa") as str"#).unwrap();
 
     let scopes = Stack::new();
     let mut root = Item::named(KEYWORD_ROOT);
@@ -416,15 +419,13 @@ fn test_resolve_recursive_1() {
     assert_eq!(lib.ns.items[0].referent, Some(AbsPath2::new(vec![0])));
     assert_eq!(lib.ns.items[1].referent, Some(AbsPath2::new(vec![1, 0])));
 }
-    
 
 #[test]
 fn test_resolve_recursive_2() {
-
     use parse_lib;
-    use LIBNAME_STD;
-    use KEYWORD_ROOT;
     use KEYWORD_INTRINSIC;
+    use KEYWORD_ROOT;
+    use LIBNAME_STD;
 
     let source = &br#"
 intrinsic("module") as module
@@ -437,7 +438,6 @@ module(
     export(item_a item_b)
 ) as date
 "#[..];
-    
 
     let mut root = Item::named(KEYWORD_ROOT);
     let mut intrinsic = Item::named(KEYWORD_INTRINSIC);
@@ -448,18 +448,21 @@ module(
 
     parse_lib(LIBNAME_STD, &source, &mut root, None).unwrap();
 
-
-    assert_eq!(root.ns.items[1].ns.items[2].ns.items[2].ns.items[0].referent, Some(AbsPath2::new(vec![1, 2, 0])));
-    assert_eq!(root.ns.items[1].ns.items[2].ns.items[2].ns.items[1].referent, Some(AbsPath2::new(vec![1, 2, 1])));
+    assert_eq!(
+        root.ns.items[1].ns.items[2].ns.items[2].ns.items[0].referent,
+        Some(AbsPath2::new(vec![1, 2, 0]))
+    );
+    assert_eq!(
+        root.ns.items[1].ns.items[2].ns.items[2].ns.items[1].referent,
+        Some(AbsPath2::new(vec![1, 2, 1]))
+    );
     println!("{:#?}", root);
 }
 
-    
 pub fn glob_import<'str>(root: &Item<'str>, source: &AbsPath2, target: &mut Item<'str>) {
     let source_ns = &root.traverse_path(source).ns;
 
     for (name, idx) in &source_ns.local {
-
         // Get source item path
         let mut source_item_path = source.clone();
         source_item_path.push_segment(*idx);
@@ -476,8 +479,8 @@ pub fn glob_import<'str>(root: &Item<'str>, source: &AbsPath2, target: &mut Item
 
 #[test]
 fn test_glob_import() {
-    use LIBNAME_PRELUDE;
     use KEYWORD_ROOT;
+    use LIBNAME_PRELUDE;
 
     let mut root = Item::named(KEYWORD_ROOT);
 
