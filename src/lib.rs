@@ -66,10 +66,16 @@ pub fn parse_lib<'ns, 'str: 'ns>(
 ) -> Result<AbsPath2, Error> {
     let string = from_utf8(bytes)?;
 
+    info!("Parsing {}.", libname);
+
     let token_tree: Vec<Exp<'str>> = tokens::parse_file(string)?;
 
-    let lib = nameres::resolve(libname, &token_tree, root, prelude_path)?;
-    let idx = root.add_child(lib);
+    info!("Doing name resolution for {}.", libname);
+
+    let mut lib = nameres::resolve(libname, &token_tree, root, prelude_path)?;
+    let idx = root.next_idx();
+    lib.path = AbsPath2::new(vec![idx]);
+    root.add_child(lib);
 
     Ok(AbsPath2::new(vec![idx]))
 }
@@ -97,6 +103,7 @@ pub fn parse_with_stdlib<'a>(
     bytestore.push(fs::read(filename)?);
 
     let mut intrinsic = Item::named(KEYWORD_INTRINSIC);
+    intrinsic.path = AbsPath2::new(vec![0]);
     root.add_child(intrinsic);
 
     parse_lib(LIBNAME_STD, &bytestore[0], &mut root, None)?;
@@ -115,7 +122,6 @@ pub fn parse_with_stdlib<'a>(
 
 #[test]
 fn parse_typecheck_name_ref() {
-    env_logger::init();
     trace!("parse_typecheck_name_ref test started and enabled logging.");
 
     let mut bytestore = Vec::new();
@@ -124,6 +130,7 @@ fn parse_typecheck_name_ref() {
     bytestore.push(fs::read("tests/fixtures/name_ref.ku").unwrap());
 
     let mut intrinsic = Item::named(KEYWORD_INTRINSIC);
+    intrinsic.path = AbsPath2::new(vec![0]);
     root.add_child(intrinsic);
 
     parse_lib(LIBNAME_STD, &bytestore[0], &mut root, None).unwrap();
@@ -135,12 +142,11 @@ fn parse_typecheck_name_ref() {
 
 #[test]
 fn parse_simple_lib_with_std() {
-    env_logger::init();
     trace!("parse_simple_lib_with_std test started and enabled logging.");
 
     let mut bytestore = Vec::new();
 
     let root = parse_with_stdlib(Path::new("tests/fixtures/simple.ku"), &mut bytestore).unwrap();
 
-    println!("{:#?}", root);
+    println!("parse_simple_lib_with_std finished {:#?}", root);
 }

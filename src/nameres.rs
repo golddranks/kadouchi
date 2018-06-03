@@ -5,14 +5,11 @@ use failure::Error;
 use scoped_stack::Stack;
 
 use KEYWORD_EXPORT;
-use KEYWORD_ROOT;
-use KEYWORD_INTRINSIC;
 
 use errors::{
     InvalidExportError, PathResolutionError, PrivacyError, ShadowingError, UnknownNameError,
 };
-use tokens::{self, Call, Exp, Path as RelPath, Lit};
-use typecheck::Object;
+use tokens::{Call, Exp, Path as RelPath, Lit};
 
 #[derive(Clone, Eq, PartialEq)]
 pub struct Namespace<'a> {
@@ -72,42 +69,39 @@ impl<'a> Item<'a> {
         item
     }
 
-    fn update_paths_recursive(&mut self, parent_path: &AbsPath2, idx: usize) {
-        self.path = parent_path.clone();
-        self.path.push_segment(idx);
-        for (idx, item) in &mut self.ns.items.iter_mut().enumerate() {
-            item.update_paths_recursive(&self.path, idx);
-        }
+    pub fn next_idx(&self) -> usize {
+        self.ns.items.len()
     }
 
-    pub fn add_child(&mut self, mut child: Item<'a>) -> usize {
+    pub fn add_child(&mut self, child: Item<'a>) {
         let idx = self.ns.items.len();
         
-        if !child.path.is_parent(&self.path) {
-            warn!("UPDATING PATHS THIS MIGHT BE A PERFORMANCE HIT child: {:?} parent: {:?}", child.path, self.path);
-            child.update_paths_recursive(&self.path, idx);
-        }
+        debug_assert!(child.path.is_parent(&self.path));
+
         if let Some(name) = child.local_name {
             self.ns.local.insert(name, idx);
         }
         self.ns.items.push(child);
-        idx
     }
 }
 
 #[test]
 fn test_traverse_path_1() {
     use LIBNAME_PRELUDE;
+    use KEYWORD_ROOT;
 
     let mut root = Item::named(KEYWORD_ROOT);
 
     let mut prelude = Item::named(LIBNAME_PRELUDE);
+    prelude.path = AbsPath2::new(vec![0]);
+    let prelude_path = prelude.path.clone();
 
-    let prelude_item = Item::named("prelude_item");
+
+    let mut prelude_item = Item::named("prelude_item");
+    prelude_item.path = AbsPath2::new(vec![0, 0]);
 
     prelude.add_child(prelude_item);
-    let prelude_idx = root.add_child(prelude);
-    let prelude_path = AbsPath2::new(vec![prelude_idx]);
+    root.add_child(prelude);
 
     assert_eq!(
         Some(LIBNAME_PRELUDE),
@@ -186,53 +180,6 @@ impl<'a> fmt::Debug for Namespace<'a> {
             }
             map.finish()
         }
-    }
-}
-
-#[derive(Clone, Eq, PartialEq)]
-pub struct AbsPath<'str> {
-    inner: Vec<&'str str>,
-}
-
-impl<'str> AbsPath<'str> {
-    pub fn new(path: Vec<&'str str>) -> Self {
-        assert_eq!(path[0], KEYWORD_ROOT);
-        Self { inner: path }
-    }
-
-    pub fn intrinsic_reference() -> Self {
-        Self { inner: vec![KEYWORD_INTRINSIC] }
-    }
-
-    pub fn is_intrinsic(&self) -> bool {
-        self.inner[0] == KEYWORD_INTRINSIC
-    }
-
-    pub fn iter_segments<'a>(&'a self) -> impl Iterator<Item = &'str str> + 'a {
-        self.inner.iter().map(|s| &**s)
-    }
-
-    pub fn push_segment(&mut self, seg: &'str str) {
-        if self.inner.is_empty() {
-            assert_eq!(seg, KEYWORD_ROOT);
-        }
-        self.inner.push(seg)
-    }
-
-    pub fn pop_segment(&mut self) -> &'str str {
-        let seg = self.inner.pop().expect("Invariant: the root is always there");
-        assert_ne!(seg, KEYWORD_ROOT); // Can't pop the root segment
-        seg
-    }
-}
-
-impl<'a> fmt::Debug for AbsPath<'a> {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        for seg in &self.inner {
-            formatter.write_str(".")?;
-            formatter.write_str(seg)?;
-        }
-        Ok(())
     }
 }
 
@@ -328,7 +275,14 @@ fn test_find_referent() {
     let mut item_b = Item::named("b");
     let mut item_c = Item::named("c");
     let mut item_d = Item::named("d");
-    let item_e = Item::named("e");
+    let mut item_e = Item::named("e");
+
+    item_a.path = AbsPath2::new(vec![0]);
+    item_b.path = AbsPath2::new(vec![0, 0]);
+    item_c.path = AbsPath2::new(vec![0, 0, 0]);
+    item_d.path = AbsPath2::new(vec![0, 0, 0, 0]);
+    item_e.path = AbsPath2::new(vec![0, 0, 0, 0, 0]);
+
     item_d.add_child(item_e);
     item_c.add_child(item_d);
     item_b.add_child(item_c);
@@ -356,56 +310,6 @@ fn test_find_referent() {
     assert_eq!(item, &root.ns.items[0].ns.items[0].ns.items[0]);
 
     assert_eq!(scope, &scopes_3);
-}
-
-fn base_path<'str>(scopes: &Stack<&Item<'str>>) -> AbsPath<'str> {
-    let mut path = Vec::new();
-    for item in scopes.iter() {
-        path.push(item.local_name.expect(
-            "Invariant: the path that is used as a reference can't contain anonymous segments.",
-        ));
-    }
-    path.reverse();
-    AbsPath::new(path)
-}
-
-fn base_path_2<'str>(scopes: &Stack<&Item<'str>>) -> AbsPath2 {
-    let mut path = Vec::new();
-    let mut iter = scopes.iter();
-    let mut local_name = iter.next().expect("Assert: there must be at least one surrounding scope").local_name.expect("Assert: Can't walk down anonymous segments!");
-    for item in iter {
-        let idx = item.ns.local.get(local_name).expect("Assert: The path segments must exist!");
-        path.push(*idx);
-        local_name = item.local_name.expect("Assert: Can't walk down anonymous segments!");
-    }
-    path.reverse();
-    AbsPath2::new(path)
-}
-
-#[test]
-fn test_base_path_2() {
-    let mut root = Item::named("root");
-    let mut item_a = Item::named("a");
-    let mut item_b = Item::named("b");
-    let mut item_c = Item::named("c");
-    let mut item_d = Item::named("d");
-    let item_e = Item::named("e");
-    item_d.add_child(item_e);
-    item_c.add_child(item_d);
-    item_b.add_child(item_c);
-    item_a.add_child(item_b);
-    root.add_child(item_a);
-
-    let scopes_0 = Stack::new();
-    let scopes_1 = scopes_0.push(&root); // item_a is in scope
-    let scopes_2 = scopes_1.push(&root.ns.items[0]); // item_b
-    let scopes_3 = scopes_2.push(&root.ns.items[0].ns.items[0]); // item_c
-    let scopes_4 = scopes_3.push(&root.ns.items[0].ns.items[0].ns.items[0]); // item_d
-
-    assert_eq!(AbsPath2::new(vec![]), base_path_2(&scopes_1));
-    assert_eq!(AbsPath2::new(vec![0]), base_path_2(&scopes_2));
-    assert_eq!(AbsPath2::new(vec![0, 0]), base_path_2(&scopes_3));
-    assert_eq!(AbsPath2::new(vec![0, 0, 0]), base_path_2(&scopes_4));
 }
 
 fn walk_path<'a, 'str, 'scope>(
@@ -439,6 +343,7 @@ fn resolve_recursive<'a, 'str: 'a, 'ns>(
     token_tree: &'a [Exp<'str>],
     scopes: Stack<&'ns Item<'str>>,
     parent: &mut Item<'str>,
+    current_path: &mut AbsPath2,
 ) -> Result<(), Error> {
     for token in token_tree {
         let mut item = if let Some(name) = token.bound_name() {
@@ -454,44 +359,54 @@ fn resolve_recursive<'a, 'str: 'a, 'ns>(
             let scopes = scopes.push(&parent);
 
             // Searches for the referent item from the surrounding scopes using the first segment of the path
-            let (base_referent, scope) = find_referent(call.path.head(), &scopes)?;
+            let (base_referent, _scope) = find_referent(call.path.head(), &scopes)?;
 
-            let mut path = base_referent.path.clone();
+            let mut referent_path = base_referent.path.clone();
 
             // Walks the path while visiting recursively the inner namespaces of the item
             // Checks if the path points to a valid and accessible (exported) item.
-            walk_path(&call.path, &base_referent, &mut path)?;
+            walk_path(&call.path, &base_referent, &mut referent_path)?;
 
             // Checks if the current item is an export command
             handle_export(call, &mut parent.ns)?;
 
-            item.referent = Some(path);
+            item.referent = Some(referent_path);
         }
 
         if let Some(lit) = token.lit() {
             item.set_lit(lit);
         }
-
-        resolve_recursive(token.call_args(), scopes.push(&parent), &mut item)?;
+        current_path.push_segment(parent.next_idx());
+        item.path = current_path.clone();
+        resolve_recursive(token.call_args(), scopes.push(&parent), &mut item, current_path)?;
+        trace!("Adding a child {:?} to parent {:?}", item, parent);
         parent.add_child(item);
+        current_path.pop_segment();
     }
     Ok(())
 }
 
 #[test]
-fn test_resolve_recursive() {
+fn test_resolve_recursive_1() {
+    use KEYWORD_ROOT;
+    use KEYWORD_INTRINSIC;
+    use tokens;
+
     let token_tree: Vec<Exp<'static>> = tokens::parse_file(r#"intrinsic("regexp") as regexp    regexp("aaa") as str"#).unwrap();
 
     let scopes = Stack::new();
     let mut root = Item::named(KEYWORD_ROOT);
 
-    let intrinsic = Item::named(KEYWORD_INTRINSIC);
+    let mut intrinsic = Item::named(KEYWORD_INTRINSIC);
+    intrinsic.path = AbsPath2::new(vec![0]);
     root.add_child(intrinsic);
 
     let mut lib = Item::named("test_lib");
-    lib.path = AbsPath2::new(vec![root.ns.items.len()]);
+    lib.path = AbsPath2::new(vec![root.next_idx()]);
 
-    resolve_recursive(&token_tree, scopes.push(&root), &mut lib).unwrap();
+    let mut current_path = lib.path.clone();
+
+    resolve_recursive(&token_tree, scopes.push(&root), &mut lib, &mut current_path).unwrap();
 
     assert_eq!(lib.ns.items.len(), 2);
 
@@ -501,15 +416,60 @@ fn test_resolve_recursive() {
     assert_eq!(lib.ns.items[0].referent, Some(AbsPath2::new(vec![0])));
     assert_eq!(lib.ns.items[1].referent, Some(AbsPath2::new(vec![1, 0])));
 }
+    
 
+#[test]
+fn test_resolve_recursive_2() {
+
+    use parse_lib;
+    use LIBNAME_STD;
+    use KEYWORD_ROOT;
+    use KEYWORD_INTRINSIC;
+
+    let source = &br#"
+intrinsic("module") as module
+intrinsic("export") as export
+
+module(
+    intrinsic("abcd") as item_a
+    intrinsic("efgh") as item_b
+
+    export(item_a item_b)
+) as date
+"#[..];
+    
+
+    let mut root = Item::named(KEYWORD_ROOT);
+    let mut intrinsic = Item::named(KEYWORD_INTRINSIC);
+    intrinsic.path = AbsPath2::new(vec![0]);
+    root.add_child(intrinsic);
+
+    trace!("Ready for parsing the lib.1");
+
+    parse_lib(LIBNAME_STD, &source, &mut root, None).unwrap();
+
+
+    assert_eq!(root.ns.items[1].ns.items[2].ns.items[2].ns.items[0].referent, Some(AbsPath2::new(vec![1, 2, 0])));
+    assert_eq!(root.ns.items[1].ns.items[2].ns.items[2].ns.items[1].referent, Some(AbsPath2::new(vec![1, 2, 1])));
+    println!("{:#?}", root);
+}
+
+    
 pub fn glob_import<'str>(root: &Item<'str>, source: &AbsPath2, target: &mut Item<'str>) {
     let source_ns = &root.traverse_path(source).ns;
 
     for (name, idx) in &source_ns.local {
+
+        // Get source item path
         let mut source_item_path = source.clone();
         source_item_path.push_segment(*idx);
+
+        // Creating a new item to the target namespace
         let mut imported_item = Item::named(name);
         imported_item.referent = Some(source_item_path);
+        imported_item.path = target.path.clone();
+        imported_item.path.push_segment(target.next_idx());
+
         target.add_child(imported_item);
     }
 }
@@ -517,16 +477,19 @@ pub fn glob_import<'str>(root: &Item<'str>, source: &AbsPath2, target: &mut Item
 #[test]
 fn test_glob_import() {
     use LIBNAME_PRELUDE;
+    use KEYWORD_ROOT;
 
     let mut root = Item::named(KEYWORD_ROOT);
 
     let mut prelude = Item::named(LIBNAME_PRELUDE);
+    prelude.path = AbsPath2::new(vec![0]);
+    let prelude_path = prelude.path.clone();
 
-    let prelude_item = Item::named("prelude_item");
-
+    let mut prelude_item = Item::named("prelude_item");
+    prelude_item.path = AbsPath2::new(vec![0, 0]);
     prelude.add_child(prelude_item);
-    let prelude_idx = root.add_child(prelude);
-    let prelude_path = AbsPath2::new(vec![prelude_idx]);
+
+    root.add_child(prelude);
 
     let mut lib = Item::named("lib");
 
@@ -547,9 +510,11 @@ pub fn resolve<'a, 'str>(
     let mut lib = Item::named(libname);
     lib.path = AbsPath2::new(vec![root.ns.items.len()]);
 
+    let mut current_path = lib.path.clone();
+
     if let Some(prelude_path) = prelude_path {
         glob_import(&root, prelude_path, &mut lib);
     }
-    resolve_recursive(token_tree, scopes.push(root), &mut lib)?;
+    resolve_recursive(token_tree, scopes.push(root), &mut lib, &mut current_path)?;
     Ok(lib)
 }

@@ -1,12 +1,8 @@
-use std::collections::HashMap as Map;
-
-use failure::{err_msg, Error};
+use failure::{Error};
 use libloading::{self, Library};
 
 use nameres::{Item, AbsPath2};
-use tokens::Lit;
-use errors::{WrongNumberOfArguments, WrongTypeOfArguments};
-use ::{KEYWORD_INTRINSIC, KEYWORD_ROOT};
+use ::KEYWORD_INTRINSIC;
 
 #[derive(Clone, Debug)]
 pub struct Object {
@@ -23,8 +19,7 @@ pub struct InnerObject {
 }
 
 extern "C" fn emit_root_object(arg_count: u16, iref_array: *const *const InnerObject) -> InnerObject {
-    trace!("EMIT ROOT WAS CALLED {:?}", arg_count);
-    InnerObject { }
+    unreachable!("The root object should be unnameable and thus unreferenceable.");
 }
 
 extern "C" fn emit_intrinsic_object(arg_count: u16, iref_array: *const *const InnerObject) -> InnerObject {
@@ -122,30 +117,26 @@ pub fn check_recursive(natives: &Library, item: &Item, root: &mut Object, curren
 
     // Checking the arguments first
     for (item_idx, arg) in item.ns.items.iter().enumerate() {
-    //    println!("Checking item {:#?}", arg);
+
         if let Some(ref referent) = arg.referent {
             trace!("Starting to create object {:?} (object own path {:?} with parent path {:?}), which is based to object {:?}", arg.local_name, arg.path, current_path, referent);
 
             let obj = retrieve_object(referent, root)?;
-       //     println!("object {:?}", obj);
 
             let new_obj = obj.construct(&arg.path);
-
-        //    println!("ROOT BEFORE {:?}", root);
 
             let parent = retrieve_object(current_path, root)?;
             let obj_idx = parent.add_arg(new_obj);
             debug_assert_eq!(item_idx, obj_idx);
-       //     println!("ROOT AFTER {:?}", root);
 
             current_path.push_segment(item_idx);
             check_recursive(natives, arg, root, current_path)?;
-            let arg_inited_object = retrieve_object(current_path, root)?;
+            let arg_object = retrieve_object(current_path, root)?;
             current_path.pop_segment();
 
-            trace!("After initializing its arguments, we are calling the object {:?}:\n{:?}", arg.local_name, arg_inited_object);
+            trace!("After initializing its arguments, we are initing the object {:?} itself:\n{:?}", arg.local_name, arg_object);
 
-            arg_inited_object.init();
+            arg_object.init();
         }
     }
 
@@ -178,6 +169,7 @@ pub fn check(root_item: &Item) -> Result<(), Error> {
             check_recursive(&lib, i, &mut root_obj, &mut current_path)?;
             current_path.pop_segment();
 
+            trace!("Inited {} successfully.", local_name);
         }
     }
 
