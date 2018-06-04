@@ -19,10 +19,15 @@ fn test_typecheck_simple_fail() {
 
     let mut bytestore = Vec::new();
 
-    assert!(
-        kadouchi::parse_with_stdlib(
+    let err = match kadouchi::parse_with_stdlib(
             Path::new("tests/fixtures/typecheck_simple_fail.ku"),
             &mut bytestore
-        ).is_err()
+        ) {
+        Ok(_) => panic!("This should fail!"),
+        Err(e) => e,
+    };
+
+    assert!(
+        format!("{:?}", err.cause()).contains("Type error")
     );
 }

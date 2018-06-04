@@ -29,15 +29,11 @@ pub struct PrivacyError(pub String);
 pub struct InvalidLibraryFileName(pub String);
 
 #[derive(Debug, Fail)]
-#[fail(display = "Item {} expects {} arguments but {} was provided.", _0, _1, _2)]
-pub struct WrongNumberOfArguments(pub String, pub usize, pub usize);
+#[fail(display = "Item expects {} arguments but {} was provided.", _0, _1)]
+pub struct WrongNumberOfArguments(pub usize, pub usize);
 
 #[derive(Debug, Fail)]
 #[fail(
-    display = "Item {} expects its {}th argument to be of type {} but an argument of type {} was provided.",
-    _0,
-    _1,
-    _2,
-    _3
+    display = "Wrong type of arguments.",
 )]
-pub struct WrongTypeOfArguments(pub String, pub usize, pub String, pub String);
+pub struct WrongTypeOfArguments;
